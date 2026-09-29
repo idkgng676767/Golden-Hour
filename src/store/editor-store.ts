@@ -4,9 +4,14 @@ import { create } from "zustand";
 import type { GradeParams, PresetKey } from "@/lib/grade/types";
 import { DEFAULT_PARAMS } from "@/lib/grade/defaults";
 import { getPreset } from "@/lib/grade/presets";
+import {
+  readParamsFromLocation,
+  writeParamsToLocation,
+} from "@/lib/grade/url";
 
 const HISTORY_LIMIT = 50;
 const STORAGE_KEY = "golden-hour:params:v1";
+const CUSTOM_PRESETS_KEY = "golden-hour:custom-presets:v1";
 
 /** A loaded image kept in the store so all components share one source. */
 export interface LoadedImage {
@@ -17,17 +22,40 @@ export interface LoadedImage {
   height: number;
   /** Original file name (for default download name). */
   name: string;
+  /** MIME type for info display. */
+  type: string;
+  /** Size in bytes for info display. */
+  size: number;
+}
+
+export type Rotation = 0 | 90 | 180 | 270;
+
+/** A user-saved preset (persisted to localStorage). */
+export interface CustomPreset {
+  id: string;
+  name: string;
+  params: GradeParams;
+  createdAt: number;
 }
 
 interface EditorState {
   // --- image ---
   image: LoadedImage | null;
   setImage: (img: LoadedImage | null) => void;
+  rotation: Rotation;
+  setRotation: (r: Rotation) => void;
+  rotateCW: () => void;
 
   // --- params ---
   params: GradeParams;
   setParam: <K extends keyof GradeParams>(key: K, value: GradeParams[K]) => void;
   applyPreset: (key: PresetKey) => void;
+  applyParams: (p: GradeParams, commit?: boolean) => void;
+
+  // --- custom presets ---
+  customPresets: CustomPreset[];
+  saveCustomPreset: (name: string) => void;
+  deleteCustomPreset: (id: string) => void;
 
   // --- history ---
   past: GradeParams[];
@@ -47,9 +75,18 @@ interface EditorState {
   /** Format the download button exports. */
   exportFormat: "jpeg" | "png";
   setExportFormat: (f: "jpeg" | "png") => void;
+  /** Modal toggles. */
+  compareOpen: boolean;
+  setCompareOpen: (v: boolean) => void;
+  helpOpen: boolean;
+  setHelpOpen: (v: boolean) => void;
+  /** URL-sync toggle — when true, params are mirrored to the URL hash. */
+  urlSync: boolean;
+  setUrlSync: (v: boolean) => void;
 
   // --- persistence ---
   hydrateFromStorage: () => void;
+  hydrateFromURL: () => boolean;
 }
 
 function loadFromStorage(): GradeParams | null {
@@ -73,23 +110,76 @@ function saveToStorage(p: GradeParams) {
   }
 }
 
+function loadCustomPresets(): CustomPreset[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_PRESETS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as CustomPreset[];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomPresets(list: CustomPreset[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
+
 export const useEditorStore = create<EditorState>((set, get) => ({
   image: null,
-  setImage: (image) => set({ image }),
+  setImage: (image) => set({ image, rotation: 0 }),
+  rotation: 0,
+  setRotation: (rotation) => set({ rotation }),
+  rotateCW: () =>
+    set((s) => ({
+      rotation: ((s.rotation + 90) % 360) as Rotation,
+    })),
 
   params: { ...DEFAULT_PARAMS },
   setParam: (key, value) => {
     const next = { ...get().params, [key]: value };
     set({ params: next });
     saveToStorage(next);
+    if (get().urlSync) writeParamsToLocation(next);
   },
   applyPreset: (key) => {
     const preset = getPreset(key);
-    // Preset application is a committed action — snapshot the previous params.
     const past = [...get().past, get().params];
     if (past.length > HISTORY_LIMIT) past.shift();
     set({ params: preset, past, future: [] });
     saveToStorage(preset);
+    if (get().urlSync) writeParamsToLocation(preset);
+  },
+  applyParams: (p, commit = true) => {
+    const past = commit ? [...get().past, get().params].slice(-HISTORY_LIMIT) : get().past;
+    set({ params: p, past, future: [] });
+    saveToStorage(p);
+    if (get().urlSync) writeParamsToLocation(p);
+  },
+
+  customPresets: typeof window !== "undefined" ? loadCustomPresets() : [],
+  saveCustomPreset: (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const preset: CustomPreset = {
+      id: `cp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+      name: trimmed.slice(0, 32),
+      params: { ...get().params },
+      createdAt: Date.now(),
+    };
+    const list = [preset, ...get().customPresets].slice(0, 12);
+    set({ customPresets: list });
+    saveCustomPresets(list);
+  },
+  deleteCustomPreset: (id) => {
+    const list = get().customPresets.filter((p) => p.id !== id);
+    set({ customPresets: list });
+    saveCustomPresets(list);
   },
 
   past: [],
@@ -110,6 +200,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: [params, ...future],
     });
     saveToStorage(previous);
+    if (get().urlSync) writeParamsToLocation(previous);
   },
   redo: () => {
     const { future, params, past } = get();
@@ -121,6 +212,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: future.slice(1),
     });
     saveToStorage(next);
+    if (get().urlSync) writeParamsToLocation(next);
   },
 
   sliderPos: 0.5,
@@ -131,8 +223,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   exportFormat: "jpeg",
   setExportFormat: (exportFormat) => set({ exportFormat }),
 
+  compareOpen: false,
+  setCompareOpen: (compareOpen) => set({ compareOpen }),
+  helpOpen: false,
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
+  urlSync: true,
+  setUrlSync: (urlSync) => set({ urlSync }),
+
   hydrateFromStorage: () => {
     const stored = loadFromStorage();
     if (stored) set({ params: stored });
+  },
+  hydrateFromURL: () => {
+    const fromURL = readParamsFromLocation();
+    if (fromURL) {
+      set({ params: fromURL });
+      saveToStorage(fromURL);
+      return true;
+    }
+    return false;
   },
 }));

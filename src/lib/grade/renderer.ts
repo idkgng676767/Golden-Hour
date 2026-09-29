@@ -133,31 +133,52 @@ export class GradeRenderer {
 
   /** Max texture size supported by this GPU — queried lazily. */
   private maxTexSize = 0;
+  /** Rotation applied to the source image (0, 90, 180, 270). */
+  private rotation = 0 as 0 | 90 | 180 | 270;
 
-  /** Upload an HTMLImageElement as a 2D texture, downscaled for preview. */
-  setImage(img: HTMLImageElement, maxDim = MAX_PREVIEW_DIM) {
+  /**
+   * Upload an HTMLImageElement as a 2D texture, downscaled for preview.
+   * The image is rotated by `rotation` degrees clockwise when drawn to the
+   * offscreen canvas, so both preview and export respect orientation.
+   */
+  setImage(
+    img: HTMLImageElement,
+    maxDim = MAX_PREVIEW_DIM,
+    rotation: 0 | 90 | 180 | 270 = 0
+  ) {
     const gl = this.gl;
     if (!this.maxTexSize) {
       this.maxTexSize = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
     }
     const gpuCap = Math.max(256, this.maxTexSize);
     // Compute downscaled dims preserving aspect ratio, clamped to GPU cap.
-    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    // For 90°/270° rotations, the swapped dimensions matter for the cap.
+    const srcW = rotation % 180 === 0 ? img.naturalWidth : img.naturalHeight;
+    const srcH = rotation % 180 === 0 ? img.naturalHeight : img.naturalWidth;
+    const longest = Math.max(srcW, srcH);
     const factor =
       longest > Math.min(maxDim, gpuCap)
         ? Math.min(maxDim, gpuCap) / longest
         : 1;
-    const w = Math.max(1, Math.round(img.naturalWidth * factor));
-    const h = Math.max(1, Math.round(img.naturalHeight * factor));
+    const w = Math.max(1, Math.round(srcW * factor));
+    const h = Math.max(1, Math.round(srcH * factor));
     this.imgW = w;
     this.imgH = h;
+    this.rotation = rotation;
 
-    // Use a 2D canvas to downscale (WebGL texImage2D accepts canvases directly).
+    // Use a 2D canvas to downscale + rotate (WebGL texImage2D accepts canvases).
     const off = document.createElement("canvas");
     off.width = w;
     off.height = h;
     const ctx = off.getContext("2d", { willReadFrequently: false })!;
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((rotation * Math.PI) / 180);
+    // After rotating the canvas, draw the image centered on its own dims.
+    const drawW = rotation % 180 === 0 ? w : h;
+    const drawH = rotation % 180 === 0 ? h : w;
+    ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.restore();
 
     if (!this.texture) this.texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0);
@@ -280,7 +301,8 @@ export async function renderFullRes(
   img: HTMLImageElement,
   params: GradeParams,
   format: "jpeg" | "png",
-  quality = 0.92
+  quality = 0.92,
+  rotation: 0 | 90 | 180 | 270 = 0
 ): Promise<Blob> {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
@@ -288,7 +310,7 @@ export async function renderFullRes(
   try {
     const canvas = document.createElement("canvas");
     const renderer = new GradeRenderer(canvas);
-    renderer.setImage(img, Math.max(w, h)); // no downscale (within GPU cap)
+    renderer.setImage(img, Math.max(w, h), rotation); // no downscale (within GPU cap)
     const { w: tw, h: th } = renderer.dims;
     renderer.resizeCanvas(tw, th, 1); // 1:1 backing store for export
     renderer.draw(params, Math.random() * 1000, false);
@@ -299,12 +321,18 @@ export async function renderFullRes(
     // fall through to CPU
   }
   // CPU fallback (slow but correct).
+  const outW = rotation % 180 === 0 ? w : h;
+  const outH = rotation % 180 === 0 ? h : w;
   const off = document.createElement("canvas");
-  off.width = w;
-  off.height = h;
+  off.width = outW;
+  off.height = outH;
   const ctx = off.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, w, h);
-  const src = ctx.getImageData(0, 0, w, h);
+  ctx.save();
+  ctx.translate(outW / 2, outH / 2);
+  ctx.rotate((rotation * Math.PI) / 180);
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  ctx.restore();
+  const src = ctx.getImageData(0, 0, outW, outH);
   // Lazy import to avoid pulling into the main bundle if WebGL succeeds.
   const { gradeImageData } = await import("./cpu");
   const out = gradeImageData(src, params);

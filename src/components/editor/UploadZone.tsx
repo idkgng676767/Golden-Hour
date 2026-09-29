@@ -16,7 +16,14 @@ async function readFile(file: File): Promise<LoadedImage> {
     img.onerror = () => reject(new Error("Failed to decode image"));
     img.src = url;
   });
-  return { url, width: dims.w, height: dims.h, name: file.name };
+  return {
+    url,
+    width: dims.w,
+    height: dims.h,
+    name: file.name,
+    type: file.type || "image/jpeg",
+    size: file.size,
+  };
 }
 
 /** Global drag-and-drop listener that overlays a drop hint on the page. */

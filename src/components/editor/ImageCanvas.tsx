@@ -24,6 +24,7 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
 
   const image = useEditorStore((s) => s.image);
   const params = useEditorStore((s) => s.params);
+  const rotation = useEditorStore((s) => s.rotation);
 
   // Expose renderer to parent.
   useEffect(() => {
@@ -46,14 +47,14 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
     };
   }, [rendererRef]);
 
-  // Load image into renderer whenever it changes.
+  // Load image into renderer whenever it OR rotation changes.
   useEffect(() => {
     const r = renderer.current;
     if (!r || !image) return;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      r.setImage(img);
+      r.setImage(img, undefined, rotation);
       const { w, h } = r.dims;
       r.resizeCanvas(w, h, Math.min(window.devicePixelRatio || 1, 2));
       r.draw(
@@ -63,7 +64,7 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
       );
     };
     img.src = image.url;
-  }, [image]);
+  }, [image, rotation]);
 
   // Start the animation loop once we have a renderer + image.
   useEffect(() => {

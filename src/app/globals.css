@@ -194,4 +194,194 @@
     background-position: 0 0, 0 10px, 10px -10px, -10px 0;
     background-color: #0d0d0f;
   }
+
+  /* ---- Film-frame easel corner marks (darkroom vibe) ---- */
+  .easel-corners::before,
+  .easel-corners::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    width: 22px;
+    height: 22px;
+    border-color: rgba(232, 168, 124, 0.55);
+    border-style: solid;
+    z-index: 5;
+  }
+  .easel-corners::before {
+    top: 10px;
+    left: 10px;
+    border-width: 1.5px 0 0 1.5px;
+  }
+  .easel-corners::after {
+    bottom: 10px;
+    right: 10px;
+    border-width: 0 1.5px 1.5px 0;
+  }
+  /* The two remaining corners via a child wrapper */
+  .easel-corners-all > .corner-tr,
+  .easel-corners-all > .corner-bl {
+    position: absolute;
+    pointer-events: none;
+    width: 22px;
+    height: 22px;
+    border-color: rgba(232, 168, 124, 0.55);
+    border-style: solid;
+    z-index: 5;
+  }
+  .easel-corners-all > .corner-tr {
+    top: 10px;
+    right: 10px;
+    border-width: 1.5px 1.5px 0 0;
+  }
+  .easel-corners-all > .corner-bl {
+    bottom: 10px;
+    left: 10px;
+    border-width: 0 0 1.5px 1.5px;
+  }
+
+  /* ---- Top-bar amber glow accent ---- */
+  .top-bar-glow {
+    position: relative;
+  }
+  .top-bar-glow::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: -1px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(232, 168, 124, 0.4) 20%,
+      rgba(232, 168, 124, 0.6) 50%,
+      rgba(232, 168, 124, 0.4) 80%,
+      transparent 100%
+    );
+    pointer-events: none;
+  }
+
+  /* ---- "Developing" shimmer for initial load ---- */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(232, 168, 124, 0.12) 45%,
+      rgba(232, 168, 124, 0.18) 50%,
+      rgba(232, 168, 124, 0.12) 55%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-sweep 1.6s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes shimmer-sweep {
+    0% { background-position: 150% 0; }
+    100% { background-position: -150% 0; }
+  }
+
+  /* ---- Slider thumb hover glow ---- */
+  [data-slot="slider-thumb"] {
+    transition: transform 100ms ease-out, box-shadow 150ms ease-out;
+    box-shadow:
+      0 0 0 0 rgba(232, 168, 124, 0),
+      0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+  [data-slot="slider-thumb"]:hover {
+    transform: scale(1.15);
+    box-shadow:
+      0 0 0 6px rgba(232, 168, 124, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+  [data-slot="slider-thumb"]:active {
+    transform: scale(1.05);
+    box-shadow:
+      0 0 0 8px rgba(232, 168, 124, 0.18),
+      0 2px 10px rgba(0, 0, 0, 0.5);
+  }
+  /* Slider range fill uses amber */
+  [data-slot="slider-range"] {
+    background: linear-gradient(
+      90deg,
+      rgba(232, 168, 124, 0.85) 0%,
+      rgba(232, 168, 124, 1) 100%
+    );
+  }
+
+  /* ---- Subtle "develop" sheen sweep on hover for cards ---- */
+  .card-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .card-sheen::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -75%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.04) 50%,
+      transparent 100%
+    );
+    pointer-events: none;
+    transition: left 600ms ease-out;
+  }
+  .card-sheen:hover::before {
+    left: 125%;
+  }
+
+  /* ---- Toast portal polish (sonner overrides) ---- */
+  [data-sonner-toast] {
+    border: 1px solid rgba(232, 168, 124, 0.25) !important;
+    background: rgba(24, 24, 27, 0.95) !important;
+    backdrop-filter: blur(12px);
+    color: #fafafa !important;
+  }
+  [data-sonner-toast][data-type="success"] {
+    border-color: rgba(134, 239, 172, 0.3) !important;
+  }
+  [data-sonner-toast][data-type="error"] {
+    border-color: rgba(253, 164, 175, 0.4) !important;
+  }
+
+  /* ---- Preset chip intensity bar ---- */
+  .preset-intensity {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--amber), rgba(232, 168, 124, 0.3));
+    border-radius: 0 0 0 999px;
+    transition: width 250ms ease-out;
+  }
+
+  /* ---- Focus ring polish ---- */
+  :focus-visible {
+    outline: 2px solid rgba(232, 168, 124, 0.6);
+    outline-offset: 2px;
+  }
+
+  /* ---- Modal entrance animation ---- */
+  .modal-enter {
+    animation: modal-fade 200ms ease-out;
+  }
+  @keyframes modal-fade {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
