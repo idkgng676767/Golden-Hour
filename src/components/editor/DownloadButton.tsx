@@ -4,18 +4,26 @@ import { useState } from "react";
 import { useEditorStore } from "@/store/editor-store";
 import { renderFullRes } from "@/lib/grade/renderer";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { Download, Loader2, ChevronDown, Image as ImageIcon } from "lucide-react";
+
+interface DownloadButtonProps {
+  /** Optional ref to the live preview renderer (unused for now, reserved for
+   *  a future "export current preview frame" fast path). */
+  rendererRef?: React.MutableRefObject<unknown>;
+}
 
 /**
  * DownloadButton — exports the full-resolution graded image.
  *
  * Uses an offscreen WebGL canvas (same shader, no downscale) and falls back
  * to the CPU grade path if WebGL is unavailable. The format menu toggles
- * JPEG (quality 92) and PNG.
+ * JPEG (quality 92) and PNG. Honors the current rotation.
  */
-export function DownloadButton() {
+export function DownloadButton(_props: DownloadButtonProps = {}) {
   const image = useEditorStore((s) => s.image);
   const params = useEditorStore((s) => s.params);
+  const rotation = useEditorStore((s) => s.rotation);
   const format = useEditorStore((s) => s.exportFormat);
   const setFormat = useEditorStore((s) => s.setExportFormat);
   const [busy, setBusy] = useState(false);
@@ -30,7 +38,7 @@ export function DownloadButton() {
       img.crossOrigin = "anonymous";
       img.src = image.url;
       await img.decode();
-      const blob = await renderFullRes(img, params, format, 0.92);
+      const blob = await renderFullRes(img, params, format, 0.92, rotation);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const base = image.name.replace(/\.[^.]+$/, "") || "golden-hour";
@@ -40,8 +48,14 @@ export function DownloadButton() {
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success("Export complete", {
+        description: `${format.toUpperCase()} · ${blob.size > 1024 * 1024 ? (blob.size / 1024 / 1024).toFixed(1) + " MB" : Math.round(blob.size / 1024) + " KB"}`,
+      });
     } catch (err) {
       console.error("[GoldenHour] export failed", err);
+      toast.error("Export failed", {
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
     } finally {
       setBusy(false);
     }

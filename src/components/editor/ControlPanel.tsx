@@ -6,6 +6,7 @@ import { PresetButtons } from "./PresetButtons";
 import { LabeledSlider } from "./Slider";
 import { ColorPicker } from "./ColorPicker";
 import { Histogram } from "./Histogram";
+import { CustomPresetSave } from "./CustomPresetSave";
 import { cn } from "@/lib/utils";
 
 function Section({
@@ -95,8 +96,14 @@ export function ControlPanel() {
           />
         </Section>
 
+        {hasImage ? (
+          <Section title="My Presets" icon={<BookmarkIcon />}>
+            <CustomPresetSave />
+          </Section>
+        ) : null}
+
         <div className="pb-2 pt-1 text-center text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">
-          Space — toggle before/after · ⌘Z — undo
+          Space — toggle before/after · ⌘Z — undo · ? — help
         </div>
       </div>
     </div>
@@ -130,6 +137,13 @@ function GrainIcon() {
         const y = 3 + Math.floor(i / 6) * 6 + ((i * 5) % 3);
         return <circle key={i} cx={x} cy={y} r={0.9 + ((i % 3) * 0.3)} />;
       })}
+    </svg>
+  );
+}
+function BookmarkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M6 3h12v18l-6-4-6 4z" />
     </svg>
   );
 }

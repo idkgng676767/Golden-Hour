@@ -55,9 +55,19 @@ function presetIntensity(p: typeof DEFAULT_PARAMS): number {
 /** Detect whether the current params match a preset (for active highlight). */
 function matchesPreset(p: typeof DEFAULT_PARAMS, key: PresetKey): boolean {
   if (key === "reset") {
-    return (Object.keys(DEFAULT_PARAMS) as (keyof typeof DEFAULT_PARAMS)[]).every(
-      (k) => p[k] === DEFAULT_PARAMS[k]
-    );
+    // "Reset" only counts as active when the params equal defaults AND no
+    // named preset also matches (Default and Reset share identical values).
+    const equalsDefault = (
+      Object.keys(DEFAULT_PARAMS) as (keyof typeof DEFAULT_PARAMS)[]
+    ).every((k) => p[k] === DEFAULT_PARAMS[k]);
+    if (!equalsDefault) return false;
+    const namedMatch = (["subtle", "default", "max"] as const).some((k) => {
+      const preset = PRESETS[k].params;
+      return (Object.keys(preset) as (keyof typeof preset)[]).every(
+        (kk) => p[kk] === preset[kk]
+      );
+    });
+    return !namedMatch;
   }
   const preset = PRESETS[key as Exclude<PresetKey, "reset">].params;
   return (Object.keys(preset) as (keyof typeof preset)[]).every(

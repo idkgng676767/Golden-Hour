@@ -76,8 +76,13 @@ export function ComparePresetsModal() {
       {/* Grid */}
       <div className="flex-1 overflow-auto p-4 sm:p-6">
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2">
-          {PRESET_LIST.map(({ key, label, params }) => {
-            const isActive = JSON.stringify(params) === JSON.stringify(currentParams);
+          {PRESET_LIST.map(({ key, label, params }, idx) => {
+            // A tile is "active" only if its params match the current params.
+            // Since Default and Reset share identical param values, we break
+            // the tie by index: if a *named* preset (idx 0-2) matches, the
+            // Reset tile (idx 3) is never considered active.
+            const matches = JSON.stringify(params) === JSON.stringify(currentParams);
+            const isActive = key === "reset" ? matches && idx === PRESET_LIST.length - 1 && !PRESET_LIST.slice(0, 3).some((p) => JSON.stringify(p.params) === JSON.stringify(currentParams)) : matches;
             return (
               <PresetTile
                 key={key}
@@ -149,7 +154,6 @@ function PresetTile({
       cancelAnimationFrame(raf);
       renderer?.dispose();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageUrl, rotation, JSON.stringify(params)]);
 
   return (

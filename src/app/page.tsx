@@ -169,17 +169,19 @@ export default function Home() {
       {/* ---- Main layout ---- */}
       <main className="flex flex-1 flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:gap-4">
         {/* Left: image preview (65% on desktop) */}
-        <div className="easel-corners-all relative flex min-h-[55vh] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface lg:min-h-0 lg:basis-[65%]">
+        <div className="relative flex min-h-[55vh] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface lg:min-h-0 lg:basis-[65%]">
           <ImageInfoBar />
-          <div className="relative flex flex-1 items-center justify-center">
+          <div className="easel-corners relative flex flex-1 items-center justify-center">
             {image ? (
               <BeforeAfterSlider className="h-full max-h-[calc(100vh-9rem)] w-full" />
             ) : (
               <EmptyState />
             )}
-            {/* Easel corner marks (4 corners) */}
-            <span className="corner-tr" aria-hidden />
-            <span className="corner-bl" aria-hidden />
+            {/* Easel corner marks — the two pseudo-element corners are via
+                .easel-corners (top-left + bottom-right). These two spans
+                add the remaining corners (top-right + bottom-left). */}
+            <span className="pointer-events-none absolute right-2.5 top-2.5 z-[5] h-[22px] w-[22px] border-amber-brand/55 border-r-[1.5px] border-t-[1.5px]" aria-hidden />
+            <span className="pointer-events-none absolute bottom-2.5 left-2.5 z-[5] h-[22px] w-[22px] border-amber-brand/55 border-b-[1.5px] border-l-[1.5px]" aria-hidden />
           </div>
         </div>
 
