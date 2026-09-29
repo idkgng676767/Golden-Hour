@@ -1,79 +1,83 @@
 # Golden Hour — Web UI Image Editor · Worklog
 
-## Round 8 — Slider Tooltips + Color Picker Edge Detection + Recipe Migration (COMPLETE)
+## Round 9 — Histogram Clipping + Slider Focus Ring + Worker Scaffold (COMPLETE)
 
 ### Phase Assessment
-Rounds 1-7 were stable. This round delivered UX polish (slider value
-tooltips on drag), fixed the color picker viewport-overflow bug, confirmed
-the auto-cycle works with diagonal mode, and added recipe migration for
-forward-compatibility.
+Rounds 1-8 were stable. This round added Lightroom-style histogram
+clipping indicators, enhanced slider keyboard focus styling, and scaffolded
+the Web Worker for CPU fallback.
 
 ### New Features Delivered
 
-1. **Slider value tooltips on drag** (`Slider.tsx` rewritten) — a floating
-   value bubble appears above the slider thumb while dragging or hovering.
-   - Position computed from the value's fraction of the range (tracks the
-     thumb horizontally).
-   - **Amber-filled** while actively dragging (high emphasis), **dim**
-     while hovering (low emphasis).
-   - Tooltip tail (rotated square) points down to the thumb.
-   - Global pointerup listener clears the dragging state even if released
-     outside the slider.
-   - Verified: VLM confirmed tooltip appears on hover and turns amber on drag.
+1. **Histogram clipping indicators** (`Histogram.tsx`) — Lightroom-style
+   zebra-stripe overlays + pulsing S/H badges that warn when highlights
+   are blown or shadows are crushed.
+   - **`computeClipping()`** — counts pixels with all channels ≥ 250
+     (highlight clip) or ≤ 5 (shadow clip), returns fractions.
+   - **Zebra pattern** — SVG `<pattern>` with 45° rotated stripes fills
+     the left edge (shadows) or right edge (highlights) of the histogram
+     when clipping is detected.
+   - **S/H badges** in the header — dim gray when no clipping, pulsing
+     pink (#fda4af) with `animate-pulse` when clipping detected.
+   - **Tooltips** show the exact clipping percentage (e.g. "3.2% shadows
+     clipped").
+   - Threshold: > 0.1% of pixels clipped triggers the indicator.
+   - Verified: applied Max preset + black point 50 → S indicator turned
+     red/pink + zebra pattern appeared on the left edge.
 
-2. **Color picker viewport-edge detection** (`ColorPicker.tsx`) — the
-   popover now flips above the swatch if there's no room below.
-   - Uses `requestAnimationFrame` to measure the popover's rect after render.
-   - If `rect.bottom > window.innerHeight`, switches to `bottom-full mb-1`
-     (opens above) instead of `top-full mt-1` (below).
-   - Verified: VLM confirmed the Shadow Tint picker "opens above the swatch
-     and does not overflow the viewport."
+2. **Slider keyboard focus ring** (`globals.css`) — enhanced `:focus-visible`
+   styling for slider thumbs.
+   - Scale 1.2 + 10px amber halo + 2px solid amber ring + drop shadow.
+   - Tab cycles through slider thumbs (native Radix behavior).
+   - Arrow keys adjust the focused slider (native Radix behavior).
+   - Verified: focused a slider thumb → VLM confirmed amber glow; arrow
+     keys changed the value (range width 371 → 394).
 
-3. **Recipe migration** (`RecipeButton.tsx`) — `migrateRecipe()` function
-   upgrades recipes from older schema versions to the current one.
-   - Validates the `app` field and `params` presence.
-   - Fills missing keys from defaults (forward-compatible).
-   - Stamps the current `RECIPE_VERSION` on the migrated recipe.
-   - Import toast notes the migration: "Recipe imported (migrated from v1 → v1)".
-   - Future migration steps would chain: `while (r.version < N) { r = migrateVn(r); }`.
-
-4. **Auto-cycle with diagonal mode** — verified that the existing
-   AutoCycleButton already works with the 45° diagonal split because both
-   modes read the same `sliderPos` store value. No code changes needed.
-   - Verified: switched to diagonal → started cycle → slider moved from 50
-     to 95 (the diagonal clip-path animated).
+3. **Web Worker scaffold** (`worker.ts`) — infrastructure for offloading
+   the CPU grade to a background thread.
+   - `gradeWithWorker()` — async wrapper that uses a Blob-URL worker when
+     available, falls back to the synchronous CPU grade otherwise.
+   - `disposeWorker()` — cleanup for hot-reload.
+   - **Note:** The worker currently delegates to the synchronous fallback
+     because inlining the full CPU grade module into the worker source
+     would require a larger refactor (the grade function uses ImageData
+     which isn't available in workers without OffscreenCanvas). The
+     scaffold is in place for a future migration to OffscreenCanvas-based
+     grading. The async interface is ready at call sites.
 
 ### Styling Polish Delivered
 
-- Slider tooltip with amber fill (dragging) vs dim surface (hovering).
-- Tooltip tail pointer.
-- Color picker popover flips intelligently based on viewport space.
+- Histogram header now shows 5 indicators: S · R · G · B · H (with S/H
+  being clipping-aware).
+- Zebra pattern fill for clipping zones.
+- Enhanced slider thumb focus ring (scale 1.2 + amber halo).
 - All previous rounds' polish retained.
 
 ### Verification Results (agent-browser + VLM)
 
 | Check | Result |
 |---|---|
-| Slider tooltip appears on hover | ✅ VLM confirmed |
-| Slider tooltip turns amber on drag | ✅ VLM confirmed |
-| Tooltip disappears when not dragging/hovering | ✅ VLM confirmed |
-| Color picker opens above swatch near viewport bottom | ✅ VLM confirmed |
-| Auto-cycle works with diagonal split mode | ✅ slider moved 50→95 |
-| Diagonal ↔ vertical toggle works | ✅ VLM confirmed |
-| Recipe migration validates + fills defaults | ✅ code-verified |
-| Lint clean, no runtime errors | ✅ |
+| S/H clipping indicators visible in histogram header | ✅ VLM confirmed |
+| No clipping → S/H dots dim gray | ✅ VLM confirmed |
+| Black point 50 → S indicator pulsing red + zebra pattern | ✅ VLM confirmed |
+| Slider thumb focus ring (amber halo on focus) | ✅ VLM confirmed |
+| Arrow keys adjust focused slider value | ✅ range width 371→394 |
+| Worker scaffold compiles + exports gradeWithWorker | ✅ lint clean |
+| Lint clean, no runtime errors on fresh load | ✅ |
 
-### Files Modified (Round 8)
+### Files Added / Modified (Round 9)
 ```
-MOD  src/components/editor/Slider.tsx        # floating value tooltip
-MOD  src/components/editor/ColorPicker.tsx   # viewport-edge flip detection
-MOD  src/components/editor/RecipeButton.tsx  # migrateRecipe() function
+NEW  src/lib/grade/worker.ts                 # Web Worker scaffold
+MOD  src/components/editor/Histogram.tsx     # clipping indicators + zebra
+MOD  src/app/globals.css                      # slider thumb focus-visible ring
 ```
 
 ---
 
-## Rounds 1-7 (reference, kept for context)
+## Rounds 1-8 (reference, kept for context)
 
+- **Round 8:** Slider value tooltips on drag, color picker viewport-edge
+  detection, recipe migration, auto-cycle with diagonal mode.
 - **Round 7:** Selective params persistence, hex color picker popover,
   recipe JSON export/import.
 - **Round 6:** Selective color grade (luminance-mask subject isolation),
@@ -94,30 +98,26 @@ MOD  src/components/editor/RecipeButton.tsx  # migrateRecipe() function
 
 ## Unresolved Issues / Risks
 
-- **None blocking.** All Round 1-8 features verified.
-- **Minor:** The slider tooltip position uses the value's fraction of the
-  range, which is approximate — the actual Radix thumb position may differ
-  slightly at the extremes due to the thumb's half-width padding. Visually
-  imperceptible.
-- **Minor:** The color picker's viewport-edge detection runs once on open;
-  if the user scrolls while the popover is open, it won't re-flip. Acceptable
-  for a short-lived popover.
+- **None blocking.** All Round 1-9 features verified.
+- **Minor:** The Web Worker scaffold delegates to the synchronous fallback
+  because `ImageData` isn't available in workers without OffscreenCanvas.
+  A full worker migration would require porting the CPU grade to use
+  `OffscreenCanvas` / transferable `ArrayBuffer`s. The async interface is
+  ready at call sites for future migration.
+- **Minor:** The clipping threshold (≥250 / ≤5) is fixed. Could be
+  user-configurable in a future round.
 
 ## Priority Recommendations for Next Phase
 
-1. **Web Worker for CPU fallback** — move the CPU grade path off the main
-   thread for large exports on non-WebGL devices. Last remaining original
-   stretch goal.
+1. **Full Web Worker migration** — port the CPU grade to use
+   `OffscreenCanvas` + transferable `ArrayBuffer`s so it runs truly
+   off-main-thread.
 2. **Batch processing** — drop multiple photos, apply the same grade to
    all, export as a zip.
 3. **Spatial subject mask** — integrate a lightweight segmentation model
-   (BodyPix/MediaPipe) for true subject isolation that doesn't rely on
-   luminance.
-4. **Recipe gallery** — a visual grid of saved recipes with thumbnails,
-   letting users browse and apply past grades.
-5. **Adjustment layers** — let users stack multiple grade passes (e.g.
-   a base golden-hour pass + a selective subject pass) as reorderable layers.
-6. **Histogram with clipping indicators** — show zebra stripes for
-   blown highlights / crushed blacks (Lightroom-style).
-7. **Keyboard shortcut for slider focus** — Tab cycles through sliders,
-   arrow keys adjust the focused one.
+   (BodyPix/MediaPipe) for true subject isolation.
+4. **Recipe gallery** — a visual grid of saved recipes with thumbnails.
+5. **Adjustment layers** — stack multiple grade passes as reorderable layers.
+6. **Adjustable clipping threshold** — let users set the clipping level.
+7. **Histogram RGB parade** — a 3-row stacked mode showing R/G/B channels
+   separately (like DaVinci Resolve's parade scope).

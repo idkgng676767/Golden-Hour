@@ -452,6 +452,15 @@
     0 0 0 8px rgba(232, 168, 124, 0.18),
     0 2px 10px rgba(0, 0, 0, 0.5) !important;
 }
+/* Keyboard focus ring — Tab to focus a slider thumb, arrow keys to adjust */
+[data-slot="slider-thumb"]:focus-visible {
+  transform: scale(1.2) !important;
+  box-shadow:
+    0 0 0 10px rgba(232, 168, 124, 0.15),
+    0 0 0 2px rgba(232, 168, 124, 0.8),
+    0 2px 10px rgba(0, 0, 0, 0.5) !important;
+  outline: none !important;
+}
 [data-slot="slider-range"] {
   background: linear-gradient(
     90deg,
