@@ -179,7 +179,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = { ...get().params, [key]: value };
     set({ params: next });
     saveToStorage(next);
-    if (get().urlSync) writeParamsToLocation(next, get().curves);
+    if (get().urlSync) writeParamsToLocation(next, get().curves, get().selective);
   },
   applyPreset: (key) => {
     const preset = getPreset(key);
@@ -187,13 +187,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (past.length > HISTORY_LIMIT) past.shift();
     set({ params: preset, past, future: [] });
     saveToStorage(preset);
-    if (get().urlSync) writeParamsToLocation(preset, get().curves);
+    if (get().urlSync) writeParamsToLocation(preset, get().curves, get().selective);
   },
   applyParams: (p, commit = true) => {
     const past = commit ? [...get().past, get().params].slice(-HISTORY_LIMIT) : get().past;
     set({ params: p, past, future: [] });
     saveToStorage(p);
-    if (get().urlSync) writeParamsToLocation(p, get().curves);
+    if (get().urlSync) writeParamsToLocation(p, get().curves, get().selective);
   },
 
   // --- curves ---
@@ -220,11 +220,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ch.points[index + 1] = ch.points[index];
     }
     set({ curves: next });
-    if (get().urlSync) writeParamsToLocation(get().params, next);
+    if (get().urlSync) writeParamsToLocation(get().params, next, get().selective);
   },
   resetCurves: () => {
     set({ curves: cloneCurves(DEFAULT_CURVES) });
-    if (get().urlSync) writeParamsToLocation(get().params, DEFAULT_CURVES);
+    if (get().urlSync) writeParamsToLocation(get().params, DEFAULT_CURVES, get().selective);
   },
   activeCurveChannel: "master",
   setActiveCurveChannel: (activeCurveChannel) => set({ activeCurveChannel }),
@@ -232,9 +232,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   // --- selective ---
   selective: { ...DEFAULT_SELECTIVE },
   setSelectiveParam: (key, value) => {
-    set({ selective: { ...get().selective, [key]: value } });
+    const next = { ...get().selective, [key]: value };
+    set({ selective: next });
+    if (get().urlSync) writeParamsToLocation(get().params, get().curves, next);
   },
-  resetSelective: () => set({ selective: { ...DEFAULT_SELECTIVE } }),
+  resetSelective: () => {
+    set({ selective: { ...DEFAULT_SELECTIVE } });
+    if (get().urlSync) writeParamsToLocation(get().params, get().curves, DEFAULT_SELECTIVE);
+  },
 
   customPresets: typeof window !== "undefined" ? loadCustomPresets() : [],
   saveCustomPreset: (name) => {
@@ -274,7 +279,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: [params, ...future],
     });
     saveToStorage(previous);
-    if (get().urlSync) writeParamsToLocation(previous, get().curves);
+    if (get().urlSync) writeParamsToLocation(previous, get().curves, get().selective);
   },
   redo: () => {
     const { future, params, past } = get();
@@ -286,7 +291,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: future.slice(1),
     });
     saveToStorage(next);
-    if (get().urlSync) writeParamsToLocation(next, get().curves);
+    if (get().urlSync) writeParamsToLocation(next, get().curves, get().selective);
   },
 
   sliderPos: 0.5,
@@ -312,11 +317,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (stored) set({ params: stored });
   },
   hydrateFromURL: () => {
-    const { params, curves } = readParamsFromLocation();
+    const { params, curves, selective } = readParamsFromLocation();
     if (params) {
       set({ params });
       saveToStorage(params);
       if (curves) set({ curves });
+      if (selective) set({ selective });
       return true;
     }
     return false;

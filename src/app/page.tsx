@@ -20,6 +20,7 @@ import { Sun, Undo2, Redo2, Upload } from "lucide-react";
 import { HistoryScrubber } from "@/components/editor/HistoryScrubber";
 import { FilmLeaderIntro } from "@/components/editor/FilmLeaderIntro";
 import { PreviewHistogram } from "@/components/editor/PreviewHistogram";
+import { RecipeButton } from "@/components/editor/RecipeButton";
 
 export default function Home() {
   const image = useEditorStore((s) => s.image);
@@ -128,7 +129,7 @@ export default function Home() {
       else if (meta && e.key.toLowerCase() === "c" && !isTyping) {
         e.preventDefault();
         const state = useEditorStore.getState();
-        const url = buildShareURL(state.params, state.curves);
+        const url = buildShareURL(state.params, state.curves, state.selective);
         navigator.clipboard
           .writeText(url)
           .then(() => toast.success("Share link copied"))
@@ -175,6 +176,7 @@ export default function Home() {
             <span className="hidden sm:inline">Upload</span>
           </UploadZone>
           <ShareButton />
+          <RecipeButton />
           {past.length > 0 || future.length > 0 ? (
             <div className="hidden md:block">
               <HistoryScrubber />

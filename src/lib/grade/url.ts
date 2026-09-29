@@ -11,8 +11,8 @@
  * back to localStorage, then to defaults. This makes shareable links work
  * even across devices.
  */
-import type { GradeParams } from "./types";
-import { DEFAULT_PARAMS } from "./defaults";
+import type { GradeParams, SelectiveParams } from "./types";
+import { DEFAULT_PARAMS, DEFAULT_SELECTIVE } from "./defaults";
 import { DEFAULT_CURVES, type Curves, isAllCurvesDefault, cloneCurves } from "./curve";
 
 /** Short keys for compact URLs. */
@@ -90,14 +90,87 @@ export function decodeParamsFromURL(
   return out;
 }
 
-/** Build a fully-qualified shareable URL for the given params. */
-export function buildShareURL(p: GradeParams, curves?: Curves): string {
+/** Build a fully-qualified shareable URL for the given params + curves + selective. */
+export function buildShareURL(
+  p: GradeParams,
+  curves?: Curves,
+  selective?: SelectiveParams
+): string {
   if (typeof window === "undefined") return "";
   let hash = encodeParamsToURL(p);
   if (curves && !isAllCurvesDefault(curves)) {
     hash += "&cv=" + encodeCurvesToURL(curves);
   }
+  if (selective && selective.enabled) {
+    hash += "&sel=" + encodeSelectiveToURL(selective);
+  }
   return `${window.location.origin}${window.location.pathname}#${hash}`;
+}
+
+/**
+ * Encode selective params into a compact base64 string.
+ * 7 numeric params × 2 bytes (quantized 0-65535) + 1 enable byte = 15 bytes.
+ */
+export function encodeSelectiveToURL(sel: SelectiveParams): string {
+  const bytes = new Uint8Array(15);
+  // enable flag
+  bytes[0] = sel.enabled ? 1 : 0;
+  // 7 params × 2 bytes, quantized
+  const vals = [
+    sel.strength,
+    sel.subjectLumaLow,
+    sel.subjectLumaHigh,
+    sel.subjectWarmth / 0.4, // normalize to 0..1
+    (sel.subjectSaturation - 0.5) / 1.5, // normalize to 0..1
+    sel.bgDarken,
+    sel.bgDesaturate,
+  ];
+  for (let i = 0; i < 7; i++) {
+    const v = Math.round(Math.max(0, Math.min(1, vals[i])) * 65535);
+    bytes[1 + i * 2] = (v >> 8) & 0xff;
+    bytes[1 + i * 2 + 1] = v & 0xff;
+  }
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Decode a base64 selective string back into a SelectiveParams object. */
+export function decodeSelectiveFromURL(
+  encoded: string,
+  base: SelectiveParams = DEFAULT_SELECTIVE
+): SelectiveParams {
+  try {
+    let b64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    if (bytes.length < 15) return { ...base };
+    const out: SelectiveParams = { ...base };
+    out.enabled = bytes[0] === 1;
+    const readVal = (offset: number) => {
+      const v = (bytes[offset] << 8) | bytes[offset + 1];
+      return v / 65535;
+    };
+    const v0 = readVal(1);
+    const v1 = readVal(3);
+    const v2 = readVal(5);
+    const v3 = readVal(7);
+    const v4 = readVal(9);
+    const v5 = readVal(11);
+    const v6 = readVal(13);
+    out.strength = v0;
+    out.subjectLumaLow = v1;
+    out.subjectLumaHigh = v2;
+    out.subjectWarmth = v3 * 0.4;
+    out.subjectSaturation = v4 * 1.5 + 0.5;
+    out.bgDarken = v5;
+    out.bgDesaturate = v6;
+    return out;
+  } catch {
+    return { ...base };
+  }
 }
 
 /**
@@ -148,32 +221,47 @@ export function decodeCurvesFromURL(
   }
 }
 
-/** Read params AND curves from the current window location, if present. */
-export function readParamsFromLocation(): { params: GradeParams | null; curves: Curves | null } {
-  if (typeof window === "undefined") return { params: null, curves: null };
+/** Read params AND curves AND selective from the current window location, if present. */
+export function readParamsFromLocation(): {
+  params: GradeParams | null;
+  curves: Curves | null;
+  selective: SelectiveParams | null;
+} {
+  if (typeof window === "undefined")
+    return { params: null, curves: null, selective: null };
   const hash = window.location.hash.replace(/^#/, "");
   if (hash) {
     const params = decodeParamsFromURL(hash);
-    // Extract curves if present.
     const cvMatch = hash.match(/(?:^|&)cv=([^&]+)/);
     const curves = cvMatch ? decodeCurvesFromURL(cvMatch[1]) : null;
-    return { params, curves };
+    const selMatch = hash.match(/(?:^|&)sel=([^&]+)/);
+    const selective = selMatch ? decodeSelectiveFromURL(selMatch[1]) : null;
+    return { params, curves, selective };
   }
   if (window.location.search) {
     const params = decodeParamsFromURL(window.location.search);
     const cvMatch = window.location.search.match(/(?:^|\?)cv=([^&]+)/);
     const curves = cvMatch ? decodeCurvesFromURL(cvMatch[1]) : null;
-    return { params, curves };
+    const selMatch = window.location.search.match(/(?:^|\?)sel=([^&]+)/);
+    const selective = selMatch ? decodeSelectiveFromURL(selMatch[1]) : null;
+    return { params, curves, selective };
   }
-  return { params: null, curves: null };
+  return { params: null, curves: null, selective: null };
 }
 
-/** Push params + curves into the URL hash. */
-export function writeParamsToLocation(p: GradeParams, curves?: Curves) {
+/** Push params + curves + selective into the URL hash. */
+export function writeParamsToLocation(
+  p: GradeParams,
+  curves?: Curves,
+  selective?: SelectiveParams
+) {
   if (typeof window === "undefined") return;
   let encoded = encodeParamsToURL(p);
   if (curves && !isAllCurvesDefault(curves)) {
     encoded += "&cv=" + encodeCurvesToURL(curves);
+  }
+  if (selective && selective.enabled) {
+    encoded += "&sel=" + encodeSelectiveToURL(selective);
   }
   const newHash = "#" + encoded;
   if (window.location.hash !== newHash) {
