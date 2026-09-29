@@ -3,23 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editor-store";
 import type { LoadedImage } from "@/store/editor-store";
+import { normalizeOrientation } from "@/lib/grade/exif";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/bmp"];
 
+/**
+ * Read a file into a LoadedImage. Honors JPEG EXIF orientation automatically —
+ * phone photos display correctly without manual rotate. Returns a normalized
+ * (orientation-stripped) blob URL + corrected dimensions.
+ */
 async function readFile(file: File): Promise<LoadedImage> {
-  const url = URL.createObjectURL(file);
-  // Read natural dimensions before storing.
-  const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => reject(new Error("Failed to decode image"));
-    img.src = url;
-  });
+  const normalized = await normalizeOrientation(file);
   return {
-    url,
-    width: dims.w,
-    height: dims.h,
+    url: normalized.url,
+    width: normalized.width,
+    height: normalized.height,
     name: file.name,
     type: file.type || "image/jpeg",
     size: file.size,

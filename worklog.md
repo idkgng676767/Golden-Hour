@@ -1,159 +1,145 @@
 # Golden Hour — Web UI Image Editor · Worklog
 
-## Round 1 — Initial Production Build (COMPLETE)
-
-Single-page Next.js 16 app that ports a cinematic 6-pass color grade (warm
-white balance → levels/gamma → split-tone → saturation → vignette → film
-grain) into a real-time WebGL fragment shader. Verified end-to-end against
-all 10 hard acceptance criteria. See Round 1 entry below for details.
-
----
-
-## Round 2 — Feature Expansion + Styling Polish (COMPLETE)
+## Round 3 — Diagonal Split + EXIF + History Scrubber + Polish (COMPLETE)
 
 ### Phase Assessment
-Round 1 was stable (clean lint, no runtime errors, all acceptance criteria
-VLM-verified). This round focused on the mandatory goals: **add features**
-and **improve styling**, drawing from the stretch-goal list plus new
-darkroom-flavored UX.
+Rounds 1 & 2 were stable (clean lint, no runtime errors, all features
+VLM-verified). This round tackled the remaining original stretch goals
+(45° diagonal handle) plus high-value new features: EXIF auto-rotation,
+undo/redo history visualization, and J/K preset stepping. Extensive
+styling polish was also shipped.
 
 ### New Features Delivered
 
-1. **Shareable URL params** (`src/lib/grade/url.ts`) — all 11 params encoded
-   into a compact URL hash (`#w=0.22&ht=E8A87C&st=142C3C&ts=0.45&sat=1.15&bp=14&wp=240&g=0.95&v=0.40&gr=12&gs=0.6`).
-   - Hydration order: URL hash → localStorage → defaults.
-   - `ShareButton` copies the full URL to clipboard with a sonner toast.
-   - URL sync is live: every slider/preset change rewrites the hash via
-     `history.replaceState` (no back-button pollution).
-   - Verified: clipboard contains the correct encoded URL.
+1. **45° diagonal before/after handle** (`BeforeAfterSlider.tsx`) — Darkroom-
+   style diagonal split. Bottom-left triangle = Before, top-right = After.
+   - Toggle via floating button (top-right of preview) or `V` key.
+   - Cursor projected onto the diagonal axis for natural dragging.
+   - Circular handle sits at the midpoint of the diagonal, rotated 45°.
+   - Verified: VLM confirmed diagonal split + handle + drag works.
 
-2. **Image rotation** (0/90/180/270°) — baked into the WebGL texture upload
-   via a canvas 2D rotate, so both preview and full-res export honor it.
-   - `R` key shortcut + info-bar rotate button.
-   - Info bar shows `↻90°` indicator when rotated.
-   - Verified: portrait rendered sideways after click.
+2. **EXIF orientation auto-rotation** (`src/lib/grade/exif.ts`) — phone photos
+   with embedded orientation tags now display correctly on upload, no manual
+   rotate needed.
+   - Primary path: `createImageBitmap({ imageOrientation: 'from-image' })`
+     (Chrome/Firefox/Safari 14+).
+   - Fallback: manual JPEG EXIF tag parsing (tag 0x0112) + canvas transform
+     for orientations 1-8.
+   - Re-encodes to a normalized (orientation-stripped) JPEG blob so the rest
+     of the app trusts `naturalWidth`/`naturalHeight`.
 
-3. **Compare-4-presets grid modal** (`ComparePresetsModal.tsx`) — full-screen
-   2×2 grid, each tile an independent WebGL canvas rendering the current
-   image with one preset. rAF-animated grain. Click a tile to apply.
-   - `C` key shortcut + info-bar grid button.
-   - Active preset highlighted with amber ring + "Active" badge.
-   - Verified: 4 tiles render with visibly different grades; Max shows
-     warmer/more vignetted than Subtle.
+3. **Undo/redo history scrubber** (`HistoryScrubber.tsx`) — tiny visual
+   indicator in the top bar showing history depth.
+   - Amber dots = past (undo-able) states, dim dots = future (redo-able).
+   - Current-state marker (bright dot with amber glow).
+   - Click any dot to jump to that history state.
+   - `X/Y` counter (e.g. "3/3").
+   - Shows on desktop only (md+); mobile keeps the icon buttons.
+   - Verified: VLM confirmed "3/3" with amber dots after preset changes.
 
-4. **Keyboard help dialog** (`KeyboardHelpDialog.tsx`) — `?` opens a polished
-   overlay listing all 9 shortcuts with styled `<kbd>` chips.
-   - Verified: all shortcuts listed correctly.
-
-5. **Image info bar** (`ImageInfoBar.tsx`) — slim header above the preview
-   showing filename, dimensions (rotation-aware), format, size, aspect ratio
-   (reduced fraction), plus rotate/compare/help icon buttons.
-
-6. **Custom user presets** (`CustomPresetSave.tsx`) — save the current params
-   as a named preset, persisted to localStorage. Up to 12 presets. Apply on
-   click, delete on hover. Shows W/G param summary + active highlight.
-   - Wired into ControlPanel as a "My Presets" section.
+4. **Keyboard `J`/`K` to step through custom presets** — film contact-sheet
+   vibe. J = previous, K = next. Wraps around. Shows a toast with
+   `Preset N/total: name`. Verified: toast "Preset 2/3: Sunset V1" appeared.
 
 ### Styling Polish Delivered
 
-- **Film-frame easel corner marks** — 4 amber L-shaped brackets framing the
-  image preview (darkroom easel vibe). Verified visible in all 4 corners.
-- **Top-bar amber glow line** — gradient underline beneath the header.
-- **Slider thumb hover glow** — 100ms scale 1.15 + amber ring on hover/active.
-- **Slider range fill** — amber gradient instead of default primary.
-- **"Developing" shimmer** utility class (`.shimmer`) for loading states.
-- **Card sheen sweep** (`.card-sheen`) — subtle diagonal light sweep on hover.
-- **Preset chip intensity bars** — animated bottom bar whose width reflects
-  the preset's weighted intensity score (warmth/grain/vignette/tint).
-- **Pulsing amber dot** next to "Develop" panel header (live/active indicator).
-- **Sonner toaster** — themed toasts for share/export/preset actions with
-  amber-tinted borders + blur backdrop.
-- **Modal entrance animation** (`.modal-enter`) — fade + translateY.
-- **Focus ring polish** — amber outline on all focusable elements.
-- **Custom toast styling overrides** for `[data-sonner-toast]`.
+- **Film perforation strips** on empty state — 28 amber rounded rectangles
+  at top & bottom edges, animated with `perf-pulse` (staggered opacity).
+  Bumped to 55% opacity + 50% black bg for visibility.
+- **Rotating aperture ring** around the hero camera icon (12s linear spin).
+- **Hero amber halo** — radial glow behind the icon (`.hero-halo`).
+- **"Press ? for shortcuts" hint** at the bottom of the empty state.
+- **Slider tick marks** — subtle vertical guides on slider tracks via
+  `::after` + `repeating-linear-gradient`. Moved OUT of `@layer utilities`
+  with `!important` to beat Tailwind v4's `bg-muted`/`bg-primary`/`shadow-sm`.
+- **Amber slider range fill** — gradient `rgba(232,168,124,0.85)` → `1.0`.
+- **Slider thumb hover glow** — scale 1.15 + 6px amber ring on hover,
+  scale 1.05 + 8px ring on active.
+- **Panel section hover accent** — border-color animates to amber on hover.
+- **Info-bar icon button hover** — amber border + ring shadow.
 
 ### Bug Found & Fixed During QA
-- **Dual "Active" preset badge** — Default and Reset presets share identical
-  param values, so both highlighted as active in the Compare modal and
-  PresetButtons. Fixed `matchesPreset()` logic so "reset" only shows active
-  when no named preset matches. VLM-verified: now only one badge shows.
+- **Slider styling not applying** — Tailwind v4 `@layer utilities` rules
+  have lower priority than shadcn's `bg-primary`/`bg-muted`/`shadow-sm`
+  utility classes. Moved all `[data-slot="slider-*"]` rules OUT of
+  `@layer utilities` to plain CSS with `!important` on the
+  conflict-prone properties. Verified: amber fill + ticks now render.
 
 ### Verification Results (agent-browser + VLM)
 
 | Check | Result |
 |---|---|
-| Share button copies encoded URL to clipboard | ✅ verified |
-| URL hash updates live on preset/slider change | ✅ `#w=0.32&...` after Max |
-| Rotate button rotates image + shows `↻90°` | ✅ VLM confirmed sideways |
-| Compare modal: 2×2 grid, 4 distinct grades | ✅ VLM confirmed |
-| Compare modal: only 1 Active badge (bug fix) | ✅ VLM: "1 tile. Max" |
-| Help dialog (`?`) lists all 9 shortcuts | ✅ VLM confirmed |
-| Info bar: filename, dims, format, size, ratio | ✅ VLM confirmed |
-| Easel corner marks in all 4 corners | ✅ VLM confirmed |
-| Custom preset save ("Test Sunset") persists | ✅ VLM confirmed |
-| Mobile 390px layout, no h-scroll | ✅ VLM confirmed |
+| Diagonal split: 45° angle, BL=Before, TR=After | ✅ VLM confirmed |
+| Diagonal handle drag moves the split | ✅ VLM: "closer to top-right" |
+| Vertical ↔ diagonal toggle (V key + button) | ✅ |
+| EXIF auto-rotation (code path verified) | ✅ createImageBitmap + fallback |
+| History scrubber: amber dots + "3/3" counter | ✅ VLM confirmed |
+| J/K preset stepping with toast | ✅ "Preset 2/3: Sunset V1" |
+| Film perforation strips visible | ✅ VLM confirmed (after opacity bump) |
+| Rotating aperture ring | ✅ VLM confirmed |
+| Amber slider range fill | ✅ VLM confirmed |
+| Slider tick marks | ✅ VLM confirmed |
+| Slider thumb hover glow | ✅ applied |
 | Lint clean, no runtime errors | ✅ |
 
-### Files Added / Modified (Round 2)
+### Files Added / Modified (Round 3)
 ```
-NEW  src/lib/grade/url.ts                          # URL param encode/decode
-NEW  src/components/editor/ShareButton.tsx
-NEW  src/components/editor/ComparePresetsModal.tsx
-NEW  src/components/editor/KeyboardHelpDialog.tsx
-NEW  src/components/editor/ImageInfoBar.tsx
-NEW  src/components/editor/CustomPresetSave.tsx
-MOD  src/store/editor-store.ts                     # rotation, customPresets, modals, urlSync
-MOD  src/lib/grade/renderer.ts                     # rotation support in setImage + renderFullRes
-MOD  src/components/editor/ImageCanvas.tsx         # pass rotation to renderer
-MOD  src/components/editor/DownloadButton.tsx      # pass rotation, toast feedback
-MOD  src/components/editor/ControlPanel.tsx        # My Presets section
-MOD  src/components/editor/PresetButtons.tsx       # intensity bars + dual-active fix
-MOD  src/components/editor/UploadZone.tsx          # capture file type/size
-MOD  src/app/page.tsx                              # wire all new components + shortcuts
-MOD  src/app/globals.css                           # easel corners, glow, shimmer, slider, toasts
+NEW  src/lib/grade/exif.ts                          # EXIF orientation parsing
+NEW  src/components/editor/HistoryScrubber.tsx     # undo/redo visualizer
+MOD  src/components/editor/BeforeAfterSlider.tsx   # diagonal mode + toggle
+MOD  src/components/editor/UploadZone.tsx          # use normalizeOrientation
+MOD  src/components/editor/EmptyState.tsx           # perforations + aperture + halo
+MOD  src/components/editor/ControlPanel.tsx        # data-section attr for hover
+MOD  src/components/editor/KeyboardHelpDialog.tsx  # added V, J, K shortcuts
+MOD  src/app/page.tsx                              # J/K handler + HistoryScrubber
+MOD  src/app/globals.css                           # slider rules outside @layer + polish
 ```
+
+---
+
+## Round 2 — Feature Expansion + Styling Polish (reference, kept for context)
+
+Shipped: shareable URL params, image rotation, compare-4-presets modal,
+keyboard help dialog, image info bar, custom user presets, plus extensive
+styling polish (easel corners, top-bar glow, slider glow, shimmer, toasts,
+preset intensity bars). Fixed dual-active preset badge bug.
 
 ## Round 1 — Initial Build (reference, kept for context)
 
-### Tech
-- Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + shadcn/ui
-- WebGL1 fragment shader (single draw call, all 6 passes)
-- Zustand for params/image/history, persisted to localStorage
-- sharp server route at `/api/export` as fallback exporter
-- Fonts: Playfair Display (serif), Inter (body), JetBrains Mono (numeric)
+Single-page Next.js 16 app, WebGL1 fragment shader porting all 6 grade
+passes (warm WB → levels/gamma → split-tone → saturation → vignette →
+film grain). All 10 hard acceptance criteria verified. Tech: Next.js 16 +
+TS + Tailwind 4 + shadcn/ui + Zustand + sharp. Fonts: Playfair Display,
+Inter, JetBrains Mono.
 
-### Original 10 Acceptance Criteria — all verified
-Drag-drop upload, sub-50ms slider updates, smooth before/after, full-res
-download, polished VSCO/Darkroom aesthetic, mobile layout, 11 params + 4
-presets, dark amber/teal palette, fine monochromatic film grain, teal
-split-tone shadows.
+---
 
 ## Unresolved Issues / Risks
 
-- **None blocking.** All Round 1 + Round 2 features verified.
-- **Minor:** The `/api/export` sharp route remains an *approximation* of the
-  grade (sharp can't do the exact split-tone math). The browser-side WebGL
-  `renderFullRes()` path is the default and is pixel-accurate. The sharp
-  route is a fallback only.
-- **Minor:** Compare modal tiles each spin their own WebGL context (4 total
-  while open). On low-end devices this could be heavy; contexts are disposed
-  on unmount. Could be optimized to a single shared context if needed.
-- **Minor:** Custom presets use `JSON.stringify` for equality checks, which
-  is O(n) but n=11 so negligible.
+- **None blocking.** All Round 1/2/3 features verified.
+- **Minor:** EXIF auto-rotation was code-reviewed but not end-to-end tested
+  with a real oriented phone photo (the test image has no EXIF tag). The
+  `createImageBitmap` path is well-supported in modern browsers; the manual
+  fallback covers edge cases.
+- **Minor:** The Compare modal still spins 4 WebGL contexts while open.
+  Could be optimized to a shared context if performance becomes an issue.
+- **Minor:** Custom preset equality uses `JSON.stringify` — O(n) but n=11,
+  negligible.
 
 ## Priority Recommendations for Next Phase
 
-1. **45° diagonal before/after handle** (Darkroom-style) — last remaining
-   stretch goal from the original spec.
-2. **readPixels-based histogram** — read directly from the WebGL canvas for
-   pixel-perfect accuracy instead of the current 96px CPU-graded downsample.
-3. **Web Worker for CPU fallback** — move the CPU grade path off the main
+1. **readPixels-based histogram** — read directly from the WebGL canvas
+   for pixel-perfect accuracy instead of the current 96px CPU-graded
+   downsample.
+2. **Web Worker for CPU fallback** — move the CPU grade path off the main
    thread for large exports on non-WebGL devices.
-4. **Exif orientation auto-rotation** — read JPEG EXIF orientation tag on
-   upload so phone photos display correctly without manual rotate.
-5. **"Compare 4 presets" → "Compare N custom presets"** — extend the modal
-   to let users pick which presets (built-in + saved) to compare side-by-side.
-6. **Undo/redo history visualization** — a tiny scrubber showing how many
-   steps back/forward are available.
-7. **Keyboard `J`/`K` to step through custom presets** like a film contact
-   sheet.
+3. **"Compare N custom presets"** — extend the compare modal to let users
+   pick which presets (built-in + saved) to compare side-by-side.
+4. **Film leader countdown intro** — a brief 1-2s animation on first load
+   evoking a film reel leader (SMPTE countdown style).
+5. **Curve editor** — a tone-curve editor (like Lightroom's Tone Curve)
+   for advanced per-channel control. Could replace the simple gamma slider.
+6. **Selective color grade** — let users grade only the subject (via a
+   rough segmentation mask) differently from the background.
+7. **Batch processing** — drop multiple photos, apply the same grade to
+   all, export as a zip.

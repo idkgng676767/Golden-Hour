@@ -6,12 +6,15 @@ import { X } from "lucide-react";
 
 const SHORTCUTS: { keys: string[]; label: string; hint?: string }[] = [
   { keys: ["Space"], label: "Toggle before/after", hint: "Hold to compare" },
+  { keys: ["V"], label: "Cycle split mode", hint: "Vertical ↔ diagonal" },
+  { keys: ["J"], label: "Previous custom preset", hint: "Film contact-sheet" },
+  { keys: ["K"], label: "Next custom preset" },
+  { keys: ["R"], label: "Rotate image 90° clockwise" },
+  { keys: ["C"], label: "Open preset comparison" },
   { keys: ["⌘/Ctrl", "Z"], label: "Undo last change" },
   { keys: ["⌘/Ctrl", "Shift", "Z"], label: "Redo (or ⌘+Y)" },
   { keys: ["⌘/Ctrl", "S"], label: "Download graded image" },
   { keys: ["⌘/Ctrl", "C"], label: "Copy shareable link" },
-  { keys: ["R"], label: "Rotate image 90° clockwise" },
-  { keys: ["C"], label: "Open preset comparison" },
   { keys: ["?"], label: "Toggle this help" },
   { keys: ["Esc"], label: "Close dialog / overlay" },
 ];

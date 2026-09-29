@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Toaster as SonnerToaster } from "sonner";
 import { cn } from "@/lib/utils";
 import { Sun, Undo2, Redo2, Upload } from "lucide-react";
+import { HistoryScrubber } from "@/components/editor/HistoryScrubber";
 
 export default function Home() {
   const image = useEditorStore((s) => s.image);
@@ -26,6 +27,8 @@ export default function Home() {
   const past = useEditorStore((s) => s.past);
   const future = useEditorStore((s) => s.future);
   const applyPreset = useEditorStore((s) => s.applyPreset);
+  const applyParams = useEditorStore((s) => s.applyParams);
+  const customPresets = useEditorStore((s) => s.customPresets);
   const hydrateFromStorage = useEditorStore((s) => s.hydrateFromStorage);
   const hydrateFromURL = useEditorStore((s) => s.hydrateFromURL);
   const setHelpOpen = useEditorStore((s) => s.setHelpOpen);
@@ -69,6 +72,37 @@ export default function Home() {
         rotateCW();
         return;
       }
+      // `V` cycles before/after handle mode (vertical ↔ diagonal)
+      // (handled inside BeforeAfterSlider, but we also need to prevent
+      //  default to avoid browser conflicts — the component listens itself.)
+      // `J` / `K` step through custom presets (film contact-sheet vibe).
+      //   J = previous, K = next.
+      if (!isTyping && !meta && (e.key.toLowerCase() === "j" || e.key.toLowerCase() === "k")) {
+        const presets = useEditorStore.getState().customPresets;
+        if (presets.length === 0) return;
+        e.preventDefault();
+        const currentParams = useEditorStore.getState().params;
+        // Find the index of the currently-active custom preset, if any.
+        let activeIdx = -1;
+        for (let i = 0; i < presets.length; i++) {
+          if (JSON.stringify(presets[i].params) === JSON.stringify(currentParams)) {
+            activeIdx = i;
+            break;
+          }
+        }
+        const dir = e.key.toLowerCase() === "j" ? -1 : 1;
+        // Wrap around.
+        const nextIdx =
+          activeIdx === -1
+            ? dir === 1
+              ? 0
+              : presets.length - 1
+            : (activeIdx + dir + presets.length) % presets.length;
+        const target = presets[nextIdx];
+        applyParams(target.params, true);
+        toast.success(`Preset ${nextIdx + 1}/${presets.length}: ${target.name}`);
+        return;
+      }
       // Cmd/Ctrl+Z — undo (Cmd+Shift+Z — redo on mac).
       if (meta && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -101,7 +135,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [undo, redo, setHelpOpen, setCompareOpen, rotateCW]);
+  }, [undo, redo, setHelpOpen, setCompareOpen, rotateCW, applyParams]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -138,13 +172,18 @@ export default function Home() {
             <span className="hidden sm:inline">Upload</span>
           </UploadZone>
           <ShareButton />
+          {past.length > 0 || future.length > 0 ? (
+            <div className="hidden md:block">
+              <HistoryScrubber />
+            </div>
+          ) : null}
           <button
             type="button"
             onClick={undo}
             disabled={past.length === 0}
             aria-label="Undo"
             title="Undo (⌘Z)"
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-all hover:text-foreground active:scale-95 disabled:opacity-30"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-all hover:text-foreground active:scale-95 disabled:opacity-30 md:hidden"
           >
             <Undo2 className="h-4 w-4" />
           </button>
@@ -154,7 +193,7 @@ export default function Home() {
             disabled={future.length === 0}
             aria-label="Redo"
             title="Redo (⌘⇧Z)"
-            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-all hover:text-foreground active:scale-95 disabled:opacity-30"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-all hover:text-foreground active:scale-95 disabled:opacity-30 md:hidden"
           >
             <Redo2 className="h-4 w-4" />
           </button>

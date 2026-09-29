@@ -21,7 +21,7 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={cn("space-y-3", className)}>
+    <section data-section className={cn("space-y-3", className)}>
       <div className="flex items-center gap-2 border-b border-border/60 pb-2">
         <span className="text-amber-brand/80">{icon}</span>
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
