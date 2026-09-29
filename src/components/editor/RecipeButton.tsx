@@ -24,6 +24,28 @@ interface Recipe {
 }
 
 /**
+ * Migrate a recipe from an older schema version to the current one.
+ * Each migration step upgrades from version N → N+1.
+ * Returns null if the recipe is too old to migrate.
+ */
+function migrateRecipe(data: Partial<Recipe>): Recipe | null {
+  if (!data || data.app !== "Golden Hour" || !data.params) return null;
+  let r: Recipe = {
+    version: typeof data.version === "number" ? data.version : 1,
+    app: "Golden Hour",
+    exportedAt: data.exportedAt ?? new Date().toISOString(),
+    params: { ...DEFAULT_PARAMS, ...data.params },
+    curves: data.curves ? cloneCurves(data.curves) : cloneCurves(DEFAULT_CURVES),
+    rotation: (typeof data.rotation === "number" ? data.rotation : 0) as 0 | 90 | 180 | 270,
+    selective: { ...DEFAULT_SELECTIVE, ...data.selective },
+  };
+  // Future migrations would go here, e.g.:
+  // while (r.version < 2) { r = migrateV1toV2(r); }
+  r.version = RECIPE_VERSION;
+  return r;
+}
+
+/**
  * RecipeButton — export/import the full edit state as a JSON file.
  *
  * EXPORT: serializes params + curves + rotation + selective into a
@@ -76,37 +98,27 @@ export function RecipeButton({ className }: { className?: string }) {
     try {
       const text = await file.text();
       const data = JSON.parse(text) as Partial<Recipe>;
-      if (!data || data.app !== "Golden Hour" || !data.params) {
+      const migrated = migrateRecipe(data);
+      if (!migrated) {
         toast.error("Invalid recipe", {
           description: "Not a Golden Hour recipe file.",
         });
         return;
       }
-      // Restore params (validate against defaults for missing keys).
-      const restoredParams: GradeParams = { ...DEFAULT_PARAMS, ...data.params };
-      applyParams(restoredParams, true);
+      // Restore params.
+      applyParams(migrated.params, true);
       // Restore curves.
-      if (data.curves) {
-        const c = cloneCurves(DEFAULT_CURVES);
-        (["master", "r", "g", "b"] as const).forEach((ch) => {
-          if (data.curves && data.curves[ch]) {
-            c[ch].points = data.curves[ch].points as typeof c[typeof ch]["points"];
-          }
-        });
-        // Direct store set via setCurvePoint would be tedious; use setState.
-        useEditorStore.setState({ curves: c });
-      }
+      useEditorStore.setState({ curves: migrated.curves });
       // Restore rotation.
-      if (typeof data.rotation === "number") {
-        setRotation(data.rotation as 0 | 90 | 180 | 270);
-      }
+      setRotation(migrated.rotation);
       // Restore selective.
-      if (data.selective) {
-        const sel: SelectiveParams = { ...DEFAULT_SELECTIVE, ...data.selective };
-        useEditorStore.setState({ selective: sel });
-      }
+      useEditorStore.setState({ selective: migrated.selective });
       setMenuOpen(false);
-      toast.success("Recipe imported", {
+      const versionNote =
+        migrated.version < RECIPE_VERSION
+          ? ` (migrated from v${data.version} → v${RECIPE_VERSION})`
+          : "";
+      toast.success("Recipe imported" + versionNote, {
         description: "Full edit state restored.",
       });
     } catch (err) {

@@ -63,6 +63,26 @@ export function ColorPicker({ param, label, className }: ColorPickerProps) {
     };
   }, [open]);
 
+  // Viewport-edge detection: if the popover would overflow the bottom of
+  // the viewport, flip it above the swatch instead.
+  const [flipAbove, setFlipAbove] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const check = () => {
+      const el = popoverRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // If the popover's bottom is below the viewport, flip.
+      if (rect.bottom > window.innerHeight && rect.top > rect.height + 20) {
+        setFlipAbove(true);
+      } else {
+        setFlipAbove(false);
+      }
+    };
+    // Check after the popover has rendered.
+    requestAnimationFrame(check);
+  }, [open]);
+
   const applyHex = (hex: string) => {
     const normalized = hex.startsWith("#") ? hex : "#" + hex;
     if (/^#[0-9A-Fa-f]{6}$/.test(normalized)) {
@@ -127,7 +147,10 @@ export function ColorPicker({ param, label, className }: ColorPickerProps) {
       {open ? (
         <div
           ref={popoverRef}
-          className="modal-enter absolute right-0 top-full z-50 mt-1 w-60 rounded-xl border border-border bg-popover p-3 shadow-2xl"
+          className={cn(
+            "modal-enter absolute right-0 z-50 w-60 rounded-xl border border-border bg-popover p-3 shadow-2xl",
+            flipAbove ? "bottom-full mb-1" : "top-full mt-1"
+          )}
         >
           {/* Hex input row */}
           <div className="mb-2 flex items-center gap-2">
