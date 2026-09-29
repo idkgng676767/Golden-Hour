@@ -3,14 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "@/store/editor-store";
 import type { Histogram } from "@/lib/grade/types";
+import type { GradeRenderer } from "@/lib/grade/renderer";
 import { gradeImageData } from "@/lib/grade/cpu";
 
 const BINS = 64;
 const HIST_W = 240;
 const HIST_H = 56;
 
-/** Build a histogram from an ImageData (post-grade). */
-function buildHistogram(data: Uint8ClampedArray): Histogram {
+/** Build a histogram from raw RGBA pixels (post-grade). */
+function buildHistogram(data: Uint8Array | Uint8ClampedArray): Histogram {
   const r = new Array(BINS).fill(0);
   const g = new Array(BINS).fill(0);
   const b = new Array(BINS).fill(0);
@@ -22,7 +23,7 @@ function buildHistogram(data: Uint8ClampedArray): Histogram {
   return { r, g, b };
 }
 
-/** Downscale an image to ~96px longest side for fast histogram computation. */
+/** Downscale an image to ~96px longest side for the CPU fallback path. */
 async function downscaleToImageData(url: string, maxDim = 96): Promise<ImageData | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -46,17 +47,25 @@ async function downscaleToImageData(url: string, maxDim = 96): Promise<ImageData
 /**
  * Histogram — live RGB histogram of the graded preview.
  *
- * Recomputes on every param change with a 120ms debounce. Uses a tiny
- * (96px) CPU-graded copy so it stays decoupled from the WebGL canvas and
- * never blocks the live preview.
+ * PRIMARY PATH: read pixels directly from the live WebGL canvas via
+ * `renderer.readDownscaledPixels()` for pixel-perfect accuracy (includes
+ * the curve LUT, vignette, grain — everything the user sees).
+ *
+ * FALLBACK: if the renderer isn't available (no WebGL), re-grade a 96px
+ * CPU downsample using the same params.
+ *
+ * Recomputes on every param/curve change with a 120ms debounce.
  */
 export function Histogram() {
   const image = useEditorStore((s) => s.image);
   const params = useEditorStore((s) => s.params);
+  const curves = useEditorStore((s) => s.curves);
+  const rotation = useEditorStore((s) => s.rotation);
+  const rendererGetter = useEditorStore((s) => s.rendererGetter);
   const [hist, setHist] = useState<Histogram | null>(null);
   const originalRef = useRef<ImageData | null>(null);
 
-  // Re-decode the small original when the image changes.
+  // Re-decode the small original (for CPU fallback) when the image changes.
   useEffect(() => {
     let cancelled = false;
     if (!image) {
@@ -72,15 +81,26 @@ export function Histogram() {
     };
   }, [image]);
 
-  // Recompute the histogram (debounced) on param change.
+  // Recompute the histogram (debounced) on param/curve/rotation change.
   useEffect(() => {
-    if (!originalRef.current) return;
+    if (!image) return;
     const t = setTimeout(() => {
+      const renderer = rendererGetter?.() as GradeRenderer | null;
+      if (renderer && (renderer as GradeRenderer).readDownscaledPixels) {
+        // PRIMARY PATH: read from the live WebGL canvas.
+        const pixels = renderer.readDownscaledPixels(96);
+        if (pixels) {
+          setHist(buildHistogram(pixels));
+          return;
+        }
+      }
+      // FALLBACK: CPU grade on the small downsample.
+      if (!originalRef.current) return;
       const graded = gradeImageData(originalRef.current!, params);
       setHist(buildHistogram(graded.data));
     }, 120);
     return () => clearTimeout(t);
-  }, [params, image]);
+  }, [params, curves, image, rotation, rendererGetter]);
 
   if (!hist) return null;
 

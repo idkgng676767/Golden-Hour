@@ -8,6 +8,13 @@ import {
   readParamsFromLocation,
   writeParamsToLocation,
 } from "@/lib/grade/url";
+import {
+  DEFAULT_CURVES,
+  type Curves,
+  type CurveChannel,
+  cloneCurves,
+  isAllCurvesDefault,
+} from "@/lib/grade/curve";
 
 const HISTORY_LIMIT = 50;
 const STORAGE_KEY = "golden-hour:params:v1";
@@ -52,6 +59,18 @@ interface EditorState {
   applyPreset: (key: PresetKey) => void;
   applyParams: (p: GradeParams, commit?: boolean) => void;
 
+  // --- curves (tone curve editor) ---
+  curves: Curves;
+  setCurvePoint: (
+    channel: "master" | "r" | "g" | "b",
+    index: number,
+    y: number
+  ) => void;
+  resetCurves: () => void;
+  /** Active curve channel being edited in the UI. */
+  activeCurveChannel: "master" | "r" | "g" | "b";
+  setActiveCurveChannel: (c: "master" | "r" | "g" | "b") => void;
+
   // --- custom presets ---
   customPresets: CustomPreset[];
   saveCustomPreset: (name: string) => void;
@@ -83,6 +102,13 @@ interface EditorState {
   /** URL-sync toggle — when true, params are mirrored to the URL hash. */
   urlSync: boolean;
   setUrlSync: (v: boolean) => void;
+  /**
+   * Shared ref to the live preview renderer. Set by ImageCanvas, read by the
+   * Histogram for pixel-perfect readPixels-based grading. We store a getter
+   * function rather than the ref itself so Zustand doesn't deep-compare it.
+   */
+  rendererGetter: (() => unknown) | null;
+  setRendererGetter: (fn: (() => unknown) | null) => void;
 
   // --- persistence ---
   hydrateFromStorage: () => void;
@@ -162,6 +188,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (get().urlSync) writeParamsToLocation(p);
   },
 
+  // --- curves ---
+  curves: cloneCurves(DEFAULT_CURVES),
+  setCurvePoint: (channel, index, y) => {
+    const clamped = Math.max(0, Math.min(1, y));
+    const next = cloneCurves(get().curves);
+    const ch = next[channel];
+    // Don't allow moving endpoints off the diagonal extremes.
+    if (index === 0) {
+      ch.points[0] = 0; // locked at 0
+      return;
+    }
+    if (index === 4) {
+      ch.points[4] = 1; // locked at 1
+      return;
+    }
+    ch.points[index] = clamped;
+    // Keep monotonic-ish: ensure neighbors aren't crossed.
+    if (index > 0 && ch.points[index] < ch.points[index - 1]) {
+      ch.points[index - 1] = ch.points[index];
+    }
+    if (index < 4 && ch.points[index] > ch.points[index + 1]) {
+      ch.points[index + 1] = ch.points[index];
+    }
+    set({ curves: next });
+  },
+  resetCurves: () => set({ curves: cloneCurves(DEFAULT_CURVES) }),
+  activeCurveChannel: "master",
+  setActiveCurveChannel: (activeCurveChannel) => set({ activeCurveChannel }),
+
   customPresets: typeof window !== "undefined" ? loadCustomPresets() : [],
   saveCustomPreset: (name) => {
     const trimmed = name.trim();
@@ -229,6 +284,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   urlSync: true,
   setUrlSync: (urlSync) => set({ urlSync }),
+
+  rendererGetter: null,
+  setRendererGetter: (rendererGetter) => set({ rendererGetter }),
 
   hydrateFromStorage: () => {
     const stored = loadFromStorage();

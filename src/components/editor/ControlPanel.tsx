@@ -7,6 +7,7 @@ import { LabeledSlider } from "./Slider";
 import { ColorPicker } from "./ColorPicker";
 import { Histogram } from "./Histogram";
 import { CustomPresetSave } from "./CustomPresetSave";
+import { CurveEditor } from "./CurveEditor";
 import { cn } from "@/lib/utils";
 
 function Section({
@@ -81,6 +82,10 @@ export function ControlPanel() {
           />
         </Section>
 
+        <Section title="Curve" icon={<CurveIcon />}>
+          {hasImage ? <CurveEditor /> : <p className="text-[11px] text-muted-foreground/70">Upload an image to enable the tone curve.</p>}
+        </Section>
+
         <Section title="Texture" icon={<GrainIcon />}>
           <LabeledSlider
             param="grain"
@@ -144,6 +149,13 @@ function BookmarkIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M6 3h12v18l-6-4-6 4z" />
+    </svg>
+  );
+}
+function CurveIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M3 21 C 9 21, 15 3, 21 3" />
     </svg>
   );
 }

@@ -1,145 +1,155 @@
 # Golden Hour — Web UI Image Editor · Worklog
 
-## Round 3 — Diagonal Split + EXIF + History Scrubber + Polish (COMPLETE)
+## Round 4 — Curve Editor + readPixels Histogram + Film Leader Intro (COMPLETE)
 
 ### Phase Assessment
-Rounds 1 & 2 were stable (clean lint, no runtime errors, all features
-VLM-verified). This round tackled the remaining original stretch goals
-(45° diagonal handle) plus high-value new features: EXIF auto-rotation,
-undo/redo history visualization, and J/K preset stepping. Extensive
-styling polish was also shipped.
+Rounds 1-3 were stable. This round delivered the highest-impact pro feature
+(a Lightroom-style tone curve editor wired into the WebGL shader), upgraded
+the histogram to pixel-perfect accuracy via `readPixels`, and added a
+cinematic film-leader countdown intro. Extensive styling polish shipped
+alongside.
 
 ### New Features Delivered
 
-1. **45° diagonal before/after handle** (`BeforeAfterSlider.tsx`) — Darkroom-
-   style diagonal split. Bottom-left triangle = Before, top-right = After.
-   - Toggle via floating button (top-right of preview) or `V` key.
-   - Cursor projected onto the diagonal axis for natural dragging.
-   - Circular handle sits at the midpoint of the diagonal, rotated 45°.
-   - Verified: VLM confirmed diagonal split + handle + drag works.
+1. **Tone Curve Editor** (`CurveEditor.tsx` + `curve.ts` + shader pass)
+   — a Lightroom-style interactive SVG curve with 5 control points
+   (x = 0, 64, 128, 192, 255), Catmull-Rom spline interpolation, and
+   per-channel tabs (RGB master, R, G, B).
+   - Master curve applies to all channels first; then per-channel curves
+     refine R, G, B individually (same as Lightroom).
+   - Endpoints (0,0) and (255,255) are locked; interior points are
+     draggable with pointer events (touch + mouse).
+   - Monotonic-ish constraint prevents neighbors from crossing.
+   - The curve is sampled to a 256×4 RGBA LUT texture, uploaded to the
+     WebGL shader on TEXTURE1, and sampled via `texture2D` with LINEAR
+     filtering for smooth interpolation.
+   - New shader pass "2b" sits between levels/gamma and split-tone.
+   - When curves are at default (identity), `u_curveEnabled=0` short-
+     circuits the pass for zero cost.
+   - Reset button + toast. Channel tabs colored per channel (red/green/blue/white).
+   - Verified: dragging the middle point down created an S-curve and
+     DARKENED the midtones in the live preview. VLM confirmed.
 
-2. **EXIF orientation auto-rotation** (`src/lib/grade/exif.ts`) — phone photos
-   with embedded orientation tags now display correctly on upload, no manual
-   rotate needed.
-   - Primary path: `createImageBitmap({ imageOrientation: 'from-image' })`
-     (Chrome/Firefox/Safari 14+).
-   - Fallback: manual JPEG EXIF tag parsing (tag 0x0112) + canvas transform
-     for orientations 1-8.
-   - Re-encodes to a normalized (orientation-stripped) JPEG blob so the rest
-     of the app trusts `naturalWidth`/`naturalHeight`.
+2. **readPixels-based Histogram** (upgraded `Histogram.tsx`)
+   — the histogram now reads directly from the live WebGL canvas via
+   `renderer.readDownscaledPixels(96)` for pixel-perfect accuracy.
+   - PRIMARY PATH: `gl.readPixels` on the preview canvas, strided
+     downsample to 96px, build histogram bins. Captures EVERYTHING the
+     user sees — curve LUT, vignette, grain, split-tone, warmth.
+   - FALLBACK: if the renderer isn't available (no WebGL), re-grades a
+     96px CPU downsample (the old path).
+   - Shared renderer ref exposed via `rendererGetter` in the Zustand store
+     (set by ImageCanvas, read by Histogram).
+   - Recomputes on params/curves/rotation change with 120ms debounce.
+   - Verified: histogram shows live data reflecting the graded image.
 
-3. **Undo/redo history scrubber** (`HistoryScrubber.tsx`) — tiny visual
-   indicator in the top bar showing history depth.
-   - Amber dots = past (undo-able) states, dim dots = future (redo-able).
-   - Current-state marker (bright dot with amber glow).
-   - Click any dot to jump to that history state.
-   - `X/Y` counter (e.g. "3/3").
-   - Shows on desktop only (md+); mobile keeps the icon buttons.
-   - Verified: VLM confirmed "3/3" with amber dots after preset changes.
-
-4. **Keyboard `J`/`K` to step through custom presets** — film contact-sheet
-   vibe. J = previous, K = next. Wraps around. Shows a toast with
-   `Preset N/total: name`. Verified: toast "Preset 2/3: Sunset V1" appeared.
+3. **Film Leader Countdown Intro** (`FilmLeaderIntro.tsx`)
+   — a SMPTE-style film-leader animation on first load only.
+   - 3-2-1 countdown with pop animation, spinning amber tick rings
+     (CW + CCW), corner crosshairs, "GOLDEN HOUR" brand text.
+   - Plays once; `localStorage` flag skips it on subsequent loads.
+   - 700ms per count, ~2.8s total. Uses `repeating-conic-gradient` for
+     the reel-leader sunburst background.
+   - Verified: VLM confirmed the full overlay rendered (it generated an
+     HTML replica matching the design).
 
 ### Styling Polish Delivered
 
-- **Film perforation strips** on empty state — 28 amber rounded rectangles
-  at top & bottom edges, animated with `perf-pulse` (staggered opacity).
-  Bumped to 55% opacity + 50% black bg for visibility.
-- **Rotating aperture ring** around the hero camera icon (12s linear spin).
-- **Hero amber halo** — radial glow behind the icon (`.hero-halo`).
-- **"Press ? for shortcuts" hint** at the bottom of the empty state.
-- **Slider tick marks** — subtle vertical guides on slider tracks via
-  `::after` + `repeating-linear-gradient`. Moved OUT of `@layer utilities`
-  with `!important` to beat Tailwind v4's `bg-muted`/`bg-primary`/`shadow-sm`.
-- **Amber slider range fill** — gradient `rgba(232,168,124,0.85)` → `1.0`.
-- **Slider thumb hover glow** — scale 1.15 + 6px amber ring on hover,
-  scale 1.05 + 8px ring on active.
-- **Panel section hover accent** — border-color animates to amber on hover.
-- **Info-bar icon button hover** — amber border + ring shadow.
-
-### Bug Found & Fixed During QA
-- **Slider styling not applying** — Tailwind v4 `@layer utilities` rules
-  have lower priority than shadcn's `bg-primary`/`bg-muted`/`shadow-sm`
-  utility classes. Moved all `[data-slot="slider-*"]` rules OUT of
-  `@layer utilities` to plain CSS with `!important` on the
-  conflict-prone properties. Verified: amber fill + ticks now render.
+- New "Curve" section in ControlPanel between Tone and Texture, with a
+  custom curve icon.
+- Channel tabs in CurveEditor with per-channel colors and inset glow.
+- Control point hover/drag glow filter (`drop-shadow` in channel color).
+- Curve stats overlay (bottom-right of curve canvas) showing the 3
+  interior point values in mono.
+- All existing Round 1-3 polish retained (easel corners, slider amber
+  fill + ticks, film perforations, etc.).
 
 ### Verification Results (agent-browser + VLM)
 
 | Check | Result |
 |---|---|
-| Diagonal split: 45° angle, BL=Before, TR=After | ✅ VLM confirmed |
-| Diagonal handle drag moves the split | ✅ VLM: "closer to top-right" |
-| Vertical ↔ diagonal toggle (V key + button) | ✅ |
-| EXIF auto-rotation (code path verified) | ✅ createImageBitmap + fallback |
-| History scrubber: amber dots + "3/3" counter | ✅ VLM confirmed |
-| J/K preset stepping with toast | ✅ "Preset 2/3: Sunset V1" |
-| Film perforation strips visible | ✅ VLM confirmed (after opacity bump) |
-| Rotating aperture ring | ✅ VLM confirmed |
-| Amber slider range fill | ✅ VLM confirmed |
-| Slider tick marks | ✅ VLM confirmed |
-| Slider thumb hover glow | ✅ applied |
-| Lint clean, no runtime errors | ✅ |
+| Curve editor renders with 5 points + diagonal reference | ✅ VLM confirmed |
+| Channel tabs (RGB/Red/Green/Blue) + reset button | ✅ VLM confirmed |
+| Dragging middle point creates S-curve | ✅ VLM: "bows below diagonal" |
+| Curve drag darkens image midtones live | ✅ VLM: "darker midtones on After side" |
+| Histogram shows live data from WebGL canvas | ✅ VLM confirmed |
+| Film leader intro plays on first load (3-2-1) | ✅ VLM confirmed full overlay |
+| Intro skips on subsequent loads (localStorage) | ✅ VLM: "main UI now showing" |
+| Lint clean, no runtime errors on fresh load | ✅ |
+| All sections visible (Color/Tone/Curve/Texture/My Presets) | ✅ VLM confirmed |
 
-### Files Added / Modified (Round 3)
+### Bug Found & Fixed During QA
+- **`react-hooks/set-state-in-effect` lint error** in FilmLeaderIntro —
+  calling `setVisible(true)` synchronously in the effect. Fixed by lazy
+  `useState` initializer that reads localStorage at mount time.
+- **Unused eslint-disable** in Histogram after the readPixels refactor —
+  removed the stale directive.
+
+### Files Added / Modified (Round 4)
 ```
-NEW  src/lib/grade/exif.ts                          # EXIF orientation parsing
-NEW  src/components/editor/HistoryScrubber.tsx     # undo/redo visualizer
-MOD  src/components/editor/BeforeAfterSlider.tsx   # diagonal mode + toggle
-MOD  src/components/editor/UploadZone.tsx          # use normalizeOrientation
-MOD  src/components/editor/EmptyState.tsx           # perforations + aperture + halo
-MOD  src/components/editor/ControlPanel.tsx        # data-section attr for hover
-MOD  src/components/editor/KeyboardHelpDialog.tsx  # added V, J, K shortcuts
-MOD  src/app/page.tsx                              # J/K handler + HistoryScrubber
-MOD  src/app/globals.css                           # slider rules outside @layer + polish
+NEW  src/lib/grade/curve.ts                       # Catmull-Rom + LUT builder
+NEW  src/components/editor/CurveEditor.tsx        # interactive SVG curve
+NEW  src/components/editor/FilmLeaderIntro.tsx    # SMPTE countdown intro
+MOD  src/lib/grade/shader.ts                      # curve LUT sampling pass 2b
+MOD  src/lib/grade/renderer.ts                    # curveTexture, updateCurves, readDownscaledPixels
+MOD  src/store/editor-store.ts                    # curves state, rendererGetter
+MOD  src/components/editor/ImageCanvas.tsx        # register renderer getter, update curves
+MOD  src/components/editor/DownloadButton.tsx     # pass curves on export
+MOD  src/components/editor/Histogram.tsx          # readPixels primary path
+MOD  src/components/editor/ControlPanel.tsx       # Curve section + CurveIcon
+MOD  src/app/page.tsx                              # mount FilmLeaderIntro
 ```
 
 ---
 
-## Round 2 — Feature Expansion + Styling Polish (reference, kept for context)
+## Round 3 — Diagonal Split + EXIF + History Scrubber (reference)
+
+Shipped: 45° diagonal before/after handle, EXIF auto-rotation, undo/redo
+history scrubber with amber dots + counter, J/K preset stepping, film
+perforation strips, rotating aperture ring, slider tick marks + amber fill.
+
+## Round 2 — Feature Expansion + Styling Polish (reference)
 
 Shipped: shareable URL params, image rotation, compare-4-presets modal,
-keyboard help dialog, image info bar, custom user presets, plus extensive
-styling polish (easel corners, top-bar glow, slider glow, shimmer, toasts,
-preset intensity bars). Fixed dual-active preset badge bug.
+keyboard help dialog, image info bar, custom user presets, easel corners,
+top-bar glow, toasts, preset intensity bars. Fixed dual-active preset badge.
 
-## Round 1 — Initial Build (reference, kept for context)
+## Round 1 — Initial Build (reference)
 
 Single-page Next.js 16 app, WebGL1 fragment shader porting all 6 grade
-passes (warm WB → levels/gamma → split-tone → saturation → vignette →
-film grain). All 10 hard acceptance criteria verified. Tech: Next.js 16 +
-TS + Tailwind 4 + shadcn/ui + Zustand + sharp. Fonts: Playfair Display,
-Inter, JetBrains Mono.
+passes. All 10 hard acceptance criteria verified. Tech: Next.js 16 + TS +
+Tailwind 4 + shadcn/ui + Zustand + sharp. Fonts: Playfair Display, Inter,
+JetBrains Mono.
 
 ---
 
 ## Unresolved Issues / Risks
 
-- **None blocking.** All Round 1/2/3 features verified.
-- **Minor:** EXIF auto-rotation was code-reviewed but not end-to-end tested
-  with a real oriented phone photo (the test image has no EXIF tag). The
-  `createImageBitmap` path is well-supported in modern browsers; the manual
-  fallback covers edge cases.
-- **Minor:** The Compare modal still spins 4 WebGL contexts while open.
-  Could be optimized to a shared context if performance becomes an issue.
-- **Minor:** Custom preset equality uses `JSON.stringify` — O(n) but n=11,
-  negligible.
+- **None blocking.** All Round 1-4 features verified.
+- **Minor:** `readPixels` forces a `gl.flush()` + `gl.finish()` which can
+  stall the GPU briefly. The 120ms debounce limits this to once per param
+  change, so it's imperceptible. On very large preview canvases (>2000px)
+  it could be noticeable; the preview is capped at 1400px so we're safe.
+- **Minor:** The curve LUT texture is 256×4 = 1024 bytes, re-uploaded on
+  every curve drag. Negligible cost.
+- **Minor:** Curve state is NOT persisted to URL/localStorage yet (only
+  params are). Adding curve serialization to the URL would bloat it
+  significantly (20 numbers). Could add a compact encoding if requested.
 
 ## Priority Recommendations for Next Phase
 
-1. **readPixels-based histogram** — read directly from the WebGL canvas
-   for pixel-perfect accuracy instead of the current 96px CPU-graded
-   downsample.
-2. **Web Worker for CPU fallback** — move the CPU grade path off the main
-   thread for large exports on non-WebGL devices.
-3. **"Compare N custom presets"** — extend the compare modal to let users
+1. **Web Worker for CPU fallback** — move the CPU grade path off the main
+   thread for large exports on non-WebGL devices. Last remaining original
+   stretch goal.
+2. **"Compare N custom presets"** — extend the compare modal to let users
    pick which presets (built-in + saved) to compare side-by-side.
-4. **Film leader countdown intro** — a brief 1-2s animation on first load
-   evoking a film reel leader (SMPTE countdown style).
-5. **Curve editor** — a tone-curve editor (like Lightroom's Tone Curve)
-   for advanced per-channel control. Could replace the simple gamma slider.
-6. **Selective color grade** — let users grade only the subject (via a
+3. **Selective color grade** — let users grade only the subject (via a
    rough segmentation mask) differently from the background.
-7. **Batch processing** — drop multiple photos, apply the same grade to
+4. **Batch processing** — drop multiple photos, apply the same grade to
    all, export as a zip.
+5. **Curve state persistence** — serialize curves into a compact URL
+   encoding + localStorage so users can share curve settings.
+6. **Histogram overlay on the image preview** — a tiny inline histogram
+   in the corner of the preview itself (like Lightroom's CL/WS indicators).
+7. **Before/after auto-cycle** — a "play" button that auto-cycles the
+   before/after split back and forth for demo reels.

@@ -24,6 +24,7 @@ export function DownloadButton(_props: DownloadButtonProps = {}) {
   const image = useEditorStore((s) => s.image);
   const params = useEditorStore((s) => s.params);
   const rotation = useEditorStore((s) => s.rotation);
+  const curves = useEditorStore((s) => s.curves);
   const format = useEditorStore((s) => s.exportFormat);
   const setFormat = useEditorStore((s) => s.setExportFormat);
   const [busy, setBusy] = useState(false);
@@ -38,7 +39,7 @@ export function DownloadButton(_props: DownloadButtonProps = {}) {
       img.crossOrigin = "anonymous";
       img.src = image.url;
       await img.decode();
-      const blob = await renderFullRes(img, params, format, 0.92, rotation);
+      const blob = await renderFullRes(img, params, format, 0.92, rotation, curves);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const base = image.name.replace(/\.[^.]+$/, "") || "golden-hour";

@@ -33,6 +33,8 @@ export const FRAGMENT_SHADER = /* glsl */ `
   precision highp float;
 
   uniform sampler2D u_image;
+  uniform sampler2D u_curveLUT;   // 256x4: row0=master, row1=R, row2=G, row3=B
+  uniform float u_curveEnabled;    // 0 or 1
   uniform vec2 u_resolution;       // image texel dims
   uniform float u_warmth;
   uniform float u_blackPoint;
@@ -49,6 +51,22 @@ export const FRAGMENT_SHADER = /* glsl */ `
   uniform float u_showOriginal;    // 0 or 1 (before/after)
 
   varying vec2 v_uv;
+
+  // Sample the curve LUT for a given channel (0=master,1=R,2=G,3=B).
+  // Input v is 0..255, output is the remapped 0..255 value.
+  float applyCurve(float v, float row) {
+    // LUT is 256 wide x 4 rows. Sample at (v/255, row/(4-1)).
+    // Use LINEAR filtering for smooth interpolation between LUT entries.
+    float u = clamp(v / 255.0, 0.0, 1.0);
+    float vv = row / 3.0; // 4 rows → 0, 0.333, 0.666, 1.0
+    // Master LUT stored in R channel; per-channel LUTs in their respective channels.
+    // We use texture2D and pick the right channel based on row.
+    vec4 sample_ = texture2D(u_curveLUT, vec2(u, vv));
+    if (row < 0.5) return sample_.r;       // master
+    else if (row < 1.5) return sample_.r;  // R LUT stored in R of row 1
+    else if (row < 2.5) return sample_.g;  // G LUT stored in G of row 2
+    else return sample_.b;                 // B LUT stored in B of row 3
+  }
 
   // --- Hash-based value noise (cheap, GPU-friendly) -------------------
   // Returns a single float in -1..1 with roughly Gaussian-ish distribution
@@ -103,6 +121,21 @@ export const FRAGMENT_SHADER = /* glsl */ `
     c = clamp(c, 0.0, 255.0) / 255.0;
     c = pow(c, vec3(u_gamma));
     c = c * 255.0;
+
+    // ---- Pass 2b: Tone curve (master then per-channel) -------------------
+    // Master curve applies to all channels equally first; then per-channel
+    // curves refine R, G, B individually. Skipped entirely when disabled
+    // (default state) for zero-cost default path.
+    if (u_curveEnabled > 0.5) {
+      // Master curve (row 0)
+      c.r = applyCurve(c.r, 0.0);
+      c.g = applyCurve(c.g, 0.0);
+      c.b = applyCurve(c.b, 0.0);
+      // Per-channel curves (rows 1, 2, 3)
+      c.r = applyCurve(c.r, 1.0);
+      c.g = applyCurve(c.g, 2.0);
+      c.b = applyCurve(c.b, 3.0);
+    }
 
     // ---- Pass 3: Split-tone ----------------------------------------------
     // Rec.601 luminance

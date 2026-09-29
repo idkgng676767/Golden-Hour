@@ -25,11 +25,18 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
   const image = useEditorStore((s) => s.image);
   const params = useEditorStore((s) => s.params);
   const rotation = useEditorStore((s) => s.rotation);
+  const curves = useEditorStore((s) => s.curves);
+  const setRendererGetter = useEditorStore((s) => s.setRendererGetter);
 
-  // Expose renderer to parent.
+  // Expose renderer to parent + store (for Histogram readPixels).
   useEffect(() => {
     if (rendererRef) rendererRef.current = renderer.current;
-  });
+    setRendererGetter(() => renderer.current);
+    return () => {
+      setRendererGetter(null);
+      if (rendererRef) rendererRef.current = null;
+    };
+  }, [rendererRef, setRendererGetter]);
 
   // Initialise renderer once.
   useEffect(() => {
@@ -37,6 +44,7 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
     try {
       renderer.current = new GradeRenderer(canvasRef.current);
       if (rendererRef) rendererRef.current = renderer.current;
+      setRendererGetter(() => renderer.current);
     } catch (err) {
       console.warn("[GoldenHour] WebGL unavailable, will use CPU fallback", err);
       renderer.current = null;
@@ -45,7 +53,7 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
       renderer.current?.dispose();
       renderer.current = null;
     };
-  }, [rendererRef]);
+  }, [rendererRef, setRendererGetter]);
 
   // Load image into renderer whenever it OR rotation changes.
   useEffect(() => {
@@ -84,6 +92,15 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
     if (!r || !image) return;
     r.draw(params, performance.now() / 1000, false);
   }, [params, image]);
+
+  // Update the curve LUT texture when curves change.
+  useEffect(() => {
+    const r = renderer.current;
+    if (!r) return;
+    r.updateCurves(curves);
+    // Force a redraw so the change is visible immediately.
+    if (image) r.draw(useEditorStore.getState().params, performance.now() / 1000, false);
+  }, [curves, image]);
 
   return (
     <canvas

@@ -18,6 +18,7 @@ import { Toaster as SonnerToaster } from "sonner";
 import { cn } from "@/lib/utils";
 import { Sun, Undo2, Redo2, Upload } from "lucide-react";
 import { HistoryScrubber } from "@/components/editor/HistoryScrubber";
+import { FilmLeaderIntro } from "@/components/editor/FilmLeaderIntro";
 
 export default function Home() {
   const image = useEditorStore((s) => s.image);
@@ -139,6 +140,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <FilmLeaderIntro />
       <SonnerToaster
         position="bottom-right"
         toastOptions={{

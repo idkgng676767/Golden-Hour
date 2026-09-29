@@ -7,6 +7,7 @@
 import { VERTEX_SHADER, FRAGMENT_SHADER } from "./shader";
 import type { GradeParams } from "./types";
 import { hexToRgb } from "./color";
+import { buildCombinedLUT, type Curves, isAllCurvesDefault } from "./curve";
 
 const MAX_PREVIEW_DIM = 1400;
 
@@ -47,6 +48,8 @@ function linkProgram(gl: WebGLRenderingContext): WebGLProgram {
 
 export interface Uniforms {
   image: WebGLUniformLocation | null;
+  curveLUT: WebGLUniformLocation | null;
+  curveEnabled: WebGLUniformLocation | null;
   resolution: WebGLUniformLocation | null;
   warmth: WebGLUniformLocation | null;
   blackPoint: WebGLUniformLocation | null;
@@ -67,6 +70,7 @@ export class GradeRenderer {
   private gl: WebGLRenderingContext;
   private program: WebGLProgram;
   private texture: WebGLTexture | null = null;
+  private curveTexture: WebGLTexture | null = null;
   private buffer: WebGLBuffer;
   private uniforms: Uniforms;
   private posLoc: number;
@@ -113,6 +117,8 @@ export class GradeRenderer {
 
     this.uniforms = {
       image: gl.getUniformLocation(this.program, "u_image"),
+      curveLUT: gl.getUniformLocation(this.program, "u_curveLUT"),
+      curveEnabled: gl.getUniformLocation(this.program, "u_curveEnabled"),
       resolution: gl.getUniformLocation(this.program, "u_resolution"),
       warmth: gl.getUniformLocation(this.program, "u_warmth"),
       blackPoint: gl.getUniformLocation(this.program, "u_blackPoint"),
@@ -129,6 +135,40 @@ export class GradeRenderer {
       showOriginal: gl.getUniformLocation(this.program, "u_showOriginal"),
     };
     gl.uniform1i(this.uniforms.image, 0);
+    gl.uniform1i(this.uniforms.curveLUT, 1); // texture unit 1
+
+    // Initialize the curve LUT texture (256x4, identity).
+    this.curveTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.curveTexture);
+    const identity = new Uint8Array(256 * 4 * 4);
+    for (let x = 0; x < 256; x++) {
+      identity[x * 4 + 0] = x;
+      identity[x * 4 + 1] = x;
+      identity[x * 4 + 2] = x;
+      identity[x * 4 + 3] = 255;
+      identity[(256 + x) * 4 + 0] = x;
+      identity[(512 + x) * 4 + 1] = x;
+      identity[(768 + x) * 4 + 2] = x;
+      identity[(256 + x) * 4 + 3] = 255;
+      identity[(512 + x) * 4 + 3] = 255;
+      identity[(768 + x) * 4 + 3] = 255;
+    }
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      256,
+      4,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      identity
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   }
 
   /** Max texture size supported by this GPU — queried lazily. */
@@ -210,6 +250,72 @@ export class GradeRenderer {
   }
 
   /**
+   * Update the curve LUT texture from a Curves object.
+   * Cheap (1024 bytes) — call whenever curves change.
+   */
+  updateCurves(curves: Curves) {
+    const gl = this.gl;
+    if (!this.curveTexture) return;
+    const enabled = isAllCurvesDefault(curves) ? 0 : 1;
+    const data = buildCombinedLUT(curves);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.curveTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      256,
+      4,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      data
+    );
+    gl.uniform1f(this.uniforms.curveEnabled, enabled);
+  }
+
+  /**
+   * Read a downscaled snapshot of the current graded frame as RGBA pixels.
+   * Used by the Histogram for pixel-perfect accuracy (replaces the old
+   * 96px CPU-graded downsample). Reads from the WebGL framebuffer directly.
+   *
+   * Caller must ensure a fresh draw has happened before calling (the rAF
+   * animation loop keeps the buffer current).
+   */
+  readDownscaledPixels(maxDim = 96): Uint8Array | null {
+    const gl = this.gl;
+    if (!this.hasTexture) return null;
+    const longest = Math.max(this.imgW, this.imgH);
+    const factor = longest > maxDim ? maxDim / longest : 1;
+    const w = Math.max(1, Math.round(this.imgW * factor));
+    const h = Math.max(1, Math.round(this.imgH * factor));
+    // We can't easily downscale during readPixels — it reads at the canvas
+    // backing-store resolution. Instead, read the full canvas and sample.
+    // For preview canvases (≤1400px) this is fast enough.
+    const cw = (this.gl.canvas as HTMLCanvasElement).width;
+    const ch = (this.gl.canvas as HTMLCanvasElement).height;
+    const buf = new Uint8Array(cw * ch * 4);
+    gl.flush();
+    gl.finish();
+    gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+    // Downsample by striding.
+    const out = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) {
+      const sy = Math.floor((y / h) * ch);
+      for (let x = 0; x < w; x++) {
+        const sx = Math.floor((x / w) * cw);
+        const srcIdx = ((ch - 1 - sy) * cw + sx) * 4; // flip Y
+        const dstIdx = (y * w + x) * 4;
+        out[dstIdx] = buf[srcIdx];
+        out[dstIdx + 1] = buf[srcIdx + 1];
+        out[dstIdx + 2] = buf[srcIdx + 2];
+        out[dstIdx + 3] = 255;
+      }
+    }
+    return out;
+  }
+
+  /**
    * Render one frame with the given params.
    * `showOriginal` short-circuits the pipeline and shows the raw image.
    */
@@ -220,6 +326,10 @@ export class GradeRenderer {
 
     const hi = hexToRgb(params.highlightTint);
     const sh = hexToRgb(params.shadowTint);
+
+    // Re-bind the curve texture to unit 1 (it may have been unbound).
+    gl.activeTexture(gl.TEXTURE1);
+    if (this.curveTexture) gl.bindTexture(gl.TEXTURE_2D, this.curveTexture);
 
     gl.uniform2f(this.uniforms.resolution, this.imgW, this.imgH);
     gl.uniform1f(this.uniforms.warmth, params.warmth);
@@ -283,9 +393,11 @@ export class GradeRenderer {
     this.stopAnimation();
     const gl = this.gl;
     if (this.texture) gl.deleteTexture(this.texture);
+    if (this.curveTexture) gl.deleteTexture(this.curveTexture);
     gl.deleteBuffer(this.buffer);
     gl.deleteProgram(this.program);
     this.texture = null;
+    this.curveTexture = null;
     this.hasTexture = false;
   }
 }
@@ -302,7 +414,8 @@ export async function renderFullRes(
   params: GradeParams,
   format: "jpeg" | "png",
   quality = 0.92,
-  rotation: 0 | 90 | 180 | 270 = 0
+  rotation: 0 | 90 | 180 | 270 = 0,
+  curves?: Curves
 ): Promise<Blob> {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
@@ -311,6 +424,7 @@ export async function renderFullRes(
     const canvas = document.createElement("canvas");
     const renderer = new GradeRenderer(canvas);
     renderer.setImage(img, Math.max(w, h), rotation); // no downscale (within GPU cap)
+    if (curves) renderer.updateCurves(curves);
     const { w: tw, h: th } = renderer.dims;
     renderer.resizeCanvas(tw, th, 1); // 1:1 backing store for export
     renderer.draw(params, Math.random() * 1000, false);
