@@ -2,6 +2,7 @@
 
 import { useEditorStore } from "@/store/editor-store";
 import { RotateCw, Maximize2, HelpCircle, LayoutGrid } from "lucide-react";
+import { AutoCycleButton } from "./AutoCycleButton";
 
 function formatBytes(bytes: number): string {
   if (!bytes) return "—";
@@ -68,6 +69,7 @@ export function ImageInfoBar() {
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-1">
+        <AutoCycleButton className="!h-7 !px-2 !text-[11px]" />
         <button
           type="button"
           onClick={rotateCW}

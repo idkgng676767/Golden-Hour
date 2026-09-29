@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Sun, Undo2, Redo2, Upload } from "lucide-react";
 import { HistoryScrubber } from "@/components/editor/HistoryScrubber";
 import { FilmLeaderIntro } from "@/components/editor/FilmLeaderIntro";
+import { PreviewHistogram } from "@/components/editor/PreviewHistogram";
 
 export default function Home() {
   const image = useEditorStore((s) => s.image);
@@ -126,8 +127,8 @@ export default function Home() {
       // Cmd/Ctrl+C — copy shareable link (only when no text is selected)
       else if (meta && e.key.toLowerCase() === "c" && !isTyping) {
         e.preventDefault();
-        const params = useEditorStore.getState().params;
-        const url = buildShareURL(params);
+        const state = useEditorStore.getState();
+        const url = buildShareURL(state.params, state.curves);
         navigator.clipboard
           .writeText(url)
           .then(() => toast.success("Share link copied"))
@@ -159,7 +160,7 @@ export default function Home() {
             <Sun className="h-5 w-5" strokeWidth={1.5} />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate font-serif text-lg font-semibold leading-tight text-foreground sm:text-xl">
+            <h1 className="gradient-title truncate font-serif text-lg font-semibold leading-tight sm:text-xl">
               Golden Hour
             </h1>
             <p className="truncate text-[11px] text-muted-foreground">
@@ -218,6 +219,8 @@ export default function Home() {
             ) : (
               <EmptyState />
             )}
+            {/* Inline preview histogram (Lightroom-style) */}
+            {image ? <PreviewHistogram /> : null}
             {/* Easel corner marks — the two pseudo-element corners are via
                 .easel-corners (top-left + bottom-right). These two spans
                 add the remaining corners (top-right + bottom-left). */}

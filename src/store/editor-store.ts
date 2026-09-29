@@ -171,7 +171,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const next = { ...get().params, [key]: value };
     set({ params: next });
     saveToStorage(next);
-    if (get().urlSync) writeParamsToLocation(next);
+    if (get().urlSync) writeParamsToLocation(next, get().curves);
   },
   applyPreset: (key) => {
     const preset = getPreset(key);
@@ -179,13 +179,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (past.length > HISTORY_LIMIT) past.shift();
     set({ params: preset, past, future: [] });
     saveToStorage(preset);
-    if (get().urlSync) writeParamsToLocation(preset);
+    if (get().urlSync) writeParamsToLocation(preset, get().curves);
   },
   applyParams: (p, commit = true) => {
     const past = commit ? [...get().past, get().params].slice(-HISTORY_LIMIT) : get().past;
     set({ params: p, past, future: [] });
     saveToStorage(p);
-    if (get().urlSync) writeParamsToLocation(p);
+    if (get().urlSync) writeParamsToLocation(p, get().curves);
   },
 
   // --- curves ---
@@ -212,8 +212,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       ch.points[index + 1] = ch.points[index];
     }
     set({ curves: next });
+    if (get().urlSync) writeParamsToLocation(get().params, next);
   },
-  resetCurves: () => set({ curves: cloneCurves(DEFAULT_CURVES) }),
+  resetCurves: () => {
+    set({ curves: cloneCurves(DEFAULT_CURVES) });
+    if (get().urlSync) writeParamsToLocation(get().params, DEFAULT_CURVES);
+  },
   activeCurveChannel: "master",
   setActiveCurveChannel: (activeCurveChannel) => set({ activeCurveChannel }),
 
@@ -255,7 +259,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: [params, ...future],
     });
     saveToStorage(previous);
-    if (get().urlSync) writeParamsToLocation(previous);
+    if (get().urlSync) writeParamsToLocation(previous, get().curves);
   },
   redo: () => {
     const { future, params, past } = get();
@@ -267,7 +271,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       future: future.slice(1),
     });
     saveToStorage(next);
-    if (get().urlSync) writeParamsToLocation(next);
+    if (get().urlSync) writeParamsToLocation(next, get().curves);
   },
 
   sliderPos: 0.5,
@@ -293,10 +297,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (stored) set({ params: stored });
   },
   hydrateFromURL: () => {
-    const fromURL = readParamsFromLocation();
-    if (fromURL) {
-      set({ params: fromURL });
-      saveToStorage(fromURL);
+    const { params, curves } = readParamsFromLocation();
+    if (params) {
+      set({ params });
+      saveToStorage(params);
+      if (curves) set({ curves });
       return true;
     }
     return false;

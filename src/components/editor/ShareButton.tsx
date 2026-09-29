@@ -15,7 +15,8 @@ export function ShareButton() {
   const handleShare = async () => {
     setState("copying");
     try {
-      const url = buildShareURL(params);
+      const curves = useEditorStore.getState().curves;
+      const url = buildShareURL(params, curves);
       await navigator.clipboard.writeText(url);
       setState("copied");
       toast.success("Share link copied", {

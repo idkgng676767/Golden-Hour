@@ -393,6 +393,43 @@
   section[data-section]:hover > div:first-child {
     border-color: rgba(232, 168, 124, 0.3);
   }
+
+  /* ---- Animated gradient text (for the brand title) ---- */
+  .gradient-title {
+    background: linear-gradient(
+      90deg,
+      #fafafa 0%,
+      #E8A87C 35%,
+      #fafafa 50%,
+      #E8A87C 65%,
+      #fafafa 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-pan 8s linear infinite;
+  }
+  @keyframes gradient-pan {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+
+  /* ---- Subtle pulse for the "Cycle" button when playing ---- */
+  .pulse-amber {
+    animation: pulse-amber 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(232, 168, 124, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(232, 168, 124, 0); }
+  }
+
+  /* ---- Glass panel for overlays ---- */
+  .glass-panel {
+    background: rgba(24, 24, 27, 0.85);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  }
 }
 
 /* ====================================================================
