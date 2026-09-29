@@ -1,8 +1,8 @@
 "use client";
 
 import { create } from "zustand";
-import type { GradeParams, PresetKey } from "@/lib/grade/types";
-import { DEFAULT_PARAMS } from "@/lib/grade/defaults";
+import type { GradeParams, PresetKey, SelectiveParams } from "@/lib/grade/types";
+import { DEFAULT_PARAMS, DEFAULT_SELECTIVE } from "@/lib/grade/defaults";
 import { getPreset } from "@/lib/grade/presets";
 import {
   readParamsFromLocation,
@@ -70,6 +70,14 @@ interface EditorState {
   /** Active curve channel being edited in the UI. */
   activeCurveChannel: "master" | "r" | "g" | "b";
   setActiveCurveChannel: (c: "master" | "r" | "g" | "b") => void;
+
+  // --- selective color grade (subject isolation) ---
+  selective: SelectiveParams;
+  setSelectiveParam: <K extends keyof SelectiveParams>(
+    key: K,
+    value: SelectiveParams[K]
+  ) => void;
+  resetSelective: () => void;
 
   // --- custom presets ---
   customPresets: CustomPreset[];
@@ -220,6 +228,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
   activeCurveChannel: "master",
   setActiveCurveChannel: (activeCurveChannel) => set({ activeCurveChannel }),
+
+  // --- selective ---
+  selective: { ...DEFAULT_SELECTIVE },
+  setSelectiveParam: (key, value) => {
+    set({ selective: { ...get().selective, [key]: value } });
+  },
+  resetSelective: () => set({ selective: { ...DEFAULT_SELECTIVE } }),
 
   customPresets: typeof window !== "undefined" ? loadCustomPresets() : [],
   saveCustomPreset: (name) => {

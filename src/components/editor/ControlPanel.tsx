@@ -8,6 +8,7 @@ import { ColorPicker } from "./ColorPicker";
 import { Histogram } from "./Histogram";
 import { CustomPresetSave } from "./CustomPresetSave";
 import { CurveEditor } from "./CurveEditor";
+import { SelectiveGradePanel } from "./SelectiveGradePanel";
 import { cn } from "@/lib/utils";
 
 function Section({
@@ -86,6 +87,10 @@ export function ControlPanel() {
           {hasImage ? <CurveEditor /> : <p className="text-[11px] text-muted-foreground/70">Upload an image to enable the tone curve.</p>}
         </Section>
 
+        <Section title="Selective" icon={<MaskIcon />}>
+          {hasImage ? <SelectiveGradePanel /> : <p className="text-[11px] text-muted-foreground/70">Upload an image to enable selective grading.</p>}
+        </Section>
+
         <Section title="Texture" icon={<GrainIcon />}>
           <LabeledSlider
             param="grain"
@@ -156,6 +161,14 @@ function CurveIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M3 21 C 9 21, 15 3, 21 3" />
+    </svg>
+  );
+}
+function MaskIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3 a9 9 0 0 1 0 18 z" fill="currentColor" opacity="0.5" />
     </svg>
   );
 }

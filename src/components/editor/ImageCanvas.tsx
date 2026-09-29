@@ -26,6 +26,7 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
   const params = useEditorStore((s) => s.params);
   const rotation = useEditorStore((s) => s.rotation);
   const curves = useEditorStore((s) => s.curves);
+  const selective = useEditorStore((s) => s.selective);
   const setRendererGetter = useEditorStore((s) => s.setRendererGetter);
 
   // Expose renderer to parent + store (for Histogram readPixels).
@@ -80,7 +81,8 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
     if (!r || !image) return;
     r.startAnimation(
       () => useEditorStore.getState().params,
-      () => false
+      () => false,
+      () => useEditorStore.getState().selective
     );
     return () => r.stopAnimation();
   }, [image]);
@@ -90,8 +92,8 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
   useEffect(() => {
     const r = renderer.current;
     if (!r || !image) return;
-    r.draw(params, performance.now() / 1000, false);
-  }, [params, image]);
+    r.draw(params, performance.now() / 1000, false, selective);
+  }, [params, image, selective]);
 
   // Update the curve LUT texture when curves change.
   useEffect(() => {
@@ -99,7 +101,13 @@ export function ImageCanvas({ className, rendererRef }: ImageCanvasProps) {
     if (!r) return;
     r.updateCurves(curves);
     // Force a redraw so the change is visible immediately.
-    if (image) r.draw(useEditorStore.getState().params, performance.now() / 1000, false);
+    if (image)
+      r.draw(
+        useEditorStore.getState().params,
+        performance.now() / 1000,
+        false,
+        useEditorStore.getState().selective
+      );
   }, [curves, image]);
 
   return (

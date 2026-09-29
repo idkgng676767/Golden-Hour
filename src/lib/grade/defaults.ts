@@ -1,4 +1,4 @@
-import type { GradeParams } from "./types";
+import type { GradeParams, SelectiveParams } from "./types";
 
 export const DEFAULT_PARAMS: GradeParams = {
   warmth: 0.22,
@@ -14,6 +14,17 @@ export const DEFAULT_PARAMS: GradeParams = {
 
   grain: 12,
   grainSize: 0.6,
+};
+
+export const DEFAULT_SELECTIVE: SelectiveParams = {
+  enabled: false,
+  strength: 0.5,
+  subjectLumaLow: 0.35,
+  subjectLumaHigh: 0.85,
+  subjectWarmth: 0.15,
+  subjectSaturation: 1.2,
+  bgDarken: 0.2,
+  bgDesaturate: 0.3,
 };
 
 /** Slider range metadata — used by the UI to render controls and clamp values. */

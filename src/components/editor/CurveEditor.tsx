@@ -44,6 +44,7 @@ export function CurveEditor() {
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingIdx, setDraggingIdx] = useState<number | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const channel: CurveChannel = curves[activeChannel];
   const meta = CHANNEL_META[activeChannel];
@@ -52,6 +53,40 @@ export function CurveEditor() {
   const xFor = (idx: number) => (CURVE_X[idx] / 255) * CANVAS_SIZE;
   // Convert a y value (0..1) to SVG y coordinate (flipped, 0 at bottom).
   const yFor = (y: number) => CANVAS_SIZE - y * CANVAS_SIZE;
+
+  // Keyboard nudging: arrow keys move the selected control point by 0.01.
+  // Tab/Shift+Tab cycle between points. Escape deselects.
+  useEffect(() => {
+    if (selectedIdx === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      )
+        return;
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setCurvePoint(activeChannel, selectedIdx, channel.points[selectedIdx] + 0.01);
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setCurvePoint(activeChannel, selectedIdx, channel.points[selectedIdx] - 0.01);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSelectedIdx((i) => (i === null ? null : Math.max(0, i - 1)));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setSelectedIdx((i) => (i === null ? null : Math.min(4, i + 1)));
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedIdx(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedIdx, activeChannel, channel.points, setCurvePoint]);
 
   // Build the smooth curve path string for display.
   const curvePath = useCallback(() => {
@@ -187,26 +222,61 @@ export function CurveEditor() {
             const cx = xFor(i);
             const cy = yFor(p);
             const isLocked = i === 0 || i === 4;
+            const isSelected = selectedIdx === i;
             return (
               <g key={i}>
+                {/* Selection ring */}
+                {isSelected ? (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={11}
+                    fill="none"
+                    stroke={meta.color}
+                    strokeWidth="1"
+                    strokeDasharray="2 2"
+                    opacity={0.6}
+                    className="pointer-events-none"
+                  >
+                    <animateTransform
+                      attributeName="transform"
+                      type="rotate"
+                      from={`0 ${cx} ${cy}`}
+                      to={`360 ${cx} ${cy}`}
+                      dur="4s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                ) : null}
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={draggingIdx === i ? 7 : 5}
+                  r={draggingIdx === i ? 7 : isSelected ? 6 : 5}
                   fill={isLocked ? "#27272a" : meta.color}
                   stroke={meta.color}
-                  strokeWidth="1.5"
+                  strokeWidth={isSelected ? "2" : "1.5"}
                   className={cn(
                     "transition-all",
                     !isLocked && "cursor-grab",
                     draggingIdx === i && "cursor-grabbing"
                   )}
-                  style={{ filter: draggingIdx === i ? `drop-shadow(0 0 6px ${meta.color})` : undefined }}
+                  style={{ filter: draggingIdx === i || isSelected ? `drop-shadow(0 0 6px ${meta.color})` : undefined }}
                   onPointerDown={(e) => {
                     if (isLocked) return;
                     e.preventDefault();
                     setDraggingIdx(i);
+                    setSelectedIdx(i);
                   }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedIdx(i);
+                  }}
+                  tabIndex={0}
+                  role="slider"
+                  aria-label={`Control point ${i + 1}`}
+                  aria-valuenow={parseFloat(p.toFixed(3))}
+                  aria-valuemin={0}
+                  aria-valuemax={1}
                 />
               </g>
             );
@@ -221,8 +291,10 @@ export function CurveEditor() {
 
       {/* Hint */}
       <p className="px-1 text-[11px] leading-snug text-muted-foreground/70">
-        Drag the dots to remap shadows / mids / highlights. Endpoints are
-        locked. Master applies to all channels; R/G/B are per-channel.
+        Drag the dots to remap shadows / mids / highlights. Click to select,
+        then use <kbd className="rounded bg-surface-elevated px-1 font-mono text-[9px] text-amber-brand">↑↓</kbd> to nudge,
+        <kbd className="ml-1 rounded bg-surface-elevated px-1 font-mono text-[9px] text-amber-brand">←→</kbd> to switch points.
+        Endpoints locked.
       </p>
     </div>
   );

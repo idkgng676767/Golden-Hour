@@ -50,6 +50,16 @@ export const FRAGMENT_SHADER = /* glsl */ `
   uniform float u_time;            // for animated grain
   uniform float u_showOriginal;    // 0 or 1 (before/after)
 
+  // --- Selective color grade (subject isolation) ---
+  uniform float u_selectiveEnabled; // 0 or 1
+  uniform float u_selectiveStrength; // 0..1
+  uniform float u_subjectLumaLow;   // 0..1 (lower luma threshold for subject)
+  uniform float u_subjectLumaHigh;  // 0..1 (upper luma threshold for subject)
+  uniform float u_subjectWarmth;    // extra warmth applied to subject
+  uniform float u_subjectSaturation;// extra saturation applied to subject
+  uniform float u_bgDarken;         // 0..1, darkening for background
+  uniform float u_bgDesaturate;     // 0..1, desaturation for background
+
   varying vec2 v_uv;
 
   // Sample the curve LUT for a given channel (0=master,1=R,2=G,3=B).
@@ -156,6 +166,39 @@ export const FRAGMENT_SHADER = /* glsl */ `
     // Recompute luminance after split-tone — same as Python reference.
     float lum2 = dot(c, vec3(0.299, 0.587, 0.114));
     c = lum2 + (c - lum2) * u_saturation;
+
+    // ---- Pass 4b: Selective color grade (subject isolation) --------------
+    // Applies a secondary grade to the "subject" (defined by a luminance
+    // band) and a different grade to the background. The mask is a smooth
+    // window centered on [subjectLumaLow, subjectLumaHigh].
+    if (u_selectiveEnabled > 0.5) {
+      float l = lum2 / 255.0; // 0..1
+      // Smooth band mask: 1 inside [low, high], 0 outside, with soft edges.
+      float lowEdge = u_subjectLumaLow;
+      float highEdge = u_subjectLumaHigh;
+      float edge = 0.08; // soft transition width
+      float subjectMask = smoothstep(lowEdge - edge, lowEdge + edge, l) *
+                          (1.0 - smoothstep(highEdge - edge, highEdge + edge, l));
+      float bgMask = 1.0 - subjectMask;
+      float strength = u_selectiveStrength;
+
+      // Subject grade: extra warmth + saturation lift.
+      vec3 subjectColor = c;
+      subjectColor.r = subjectColor.r * (1.0 + u_subjectWarmth * 0.3) + u_subjectWarmth * 8.0;
+      subjectColor.g = subjectColor.g * (1.0 - u_subjectWarmth * 0.1);
+      subjectColor.b = subjectColor.b * (1.0 - u_subjectWarmth * 0.4);
+      float sLum = dot(subjectColor, vec3(0.299, 0.587, 0.114));
+      subjectColor = sLum + (subjectColor - sLum) * u_subjectSaturation;
+
+      // Background grade: darken + desaturate.
+      vec3 bgColor = c;
+      bgColor *= (1.0 - u_bgDarken);
+      float bLum = dot(bgColor, vec3(0.299, 0.587, 0.114));
+      bgColor = bLum + (bgColor - bLum) * (1.0 - u_bgDesaturate);
+
+      // Blend by mask × strength.
+      c = c * (1.0 - strength) + (subjectColor * subjectMask + bgColor * bgMask) * strength;
+    }
 
     // ---- Pass 5: Vignette ------------------------------------------------
     // cx, cy centered at 0.5; dist ∈ [0, ~1.414]; normalized to corner=1.

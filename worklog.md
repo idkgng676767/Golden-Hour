@@ -1,99 +1,94 @@
 # Golden Hour — Web UI Image Editor · Worklog
 
-## Round 5 — Curve Persistence + Auto-Cycle + Preview Histogram + Polish (COMPLETE)
+## Round 6 — Selective Color Grade + Curve Keyboard Nudging (COMPLETE)
 
 ### Phase Assessment
-Rounds 1-4 were stable. This round completed the shareability story (curve
-state now serialized into URLs), added a demo-friendly auto-cycle animation,
-a Lightroom-style inline preview histogram, and visual polish.
+Rounds 1-5 were stable. This round delivered a major pro feature (selective
+color grade with subject isolation) plus curve keyboard nudging for precise
+editing.
 
 ### New Features Delivered
 
-1. **Curve state persistence** (`url.ts` extended) — curves are now
-   serialized into a compact base64 URL segment (`&cv=<base64>`).
-   - 4 channels × 5 points × 1 byte (quantized 0-255) = 20 bytes → ~28 chars
-     URL-safe base64.
-   - `readParamsFromLocation` now returns `{ params, curves }`.
-   - `writeParamsToLocation` accepts an optional curves arg.
-   - `buildShareURL` includes curves when non-default.
-   - Store's `setCurvePoint`, `resetCurves`, `undo`, `redo`, `applyPreset`,
-     `applyParams`, `setParam` all pass curves to the URL writer.
-   - `hydrateFromURL` restores both params AND curves.
-   - Verified: dragged a curve point → URL got `cv=AECA...` → reloaded →
-     curve restored (0, 0.251, 0.502, 1.0, 1.0 matched the encoded values).
+1. **Selective color grade** (`SelectiveGradePanel.tsx` + shader pass 4b +
+   `SelectiveParams` type) — a luminance-band subject isolation mask that
+   applies a secondary grade to the subject and a different grade to the
+   background.
+   - **Subject grade**: extra warmth + saturation lift (makes skin tones pop).
+   - **Background grade**: darken + desaturate (mutes distractions).
+   - **Dual-thumb luminance band slider** — user sets [low, high] thresholds
+     defining the subject's luminance range. Smooth `smoothstep` mask with
+     soft edges prevents banding.
+   - **Enable/disable toggle** + reset button.
+   - New shader pass "4b" sits between saturation and vignette. Zero cost
+     when disabled (`u_selectiveEnabled=0`).
+   - 8 new uniforms: selectiveEnabled, selectiveStrength, subjectLumaLow/High,
+     subjectWarmth/Saturation, bgDarken/Desaturate.
+   - Subject sub-panel (amber-tinted) + Background sub-panel (teal-tinted)
+     visually distinguish the two grade targets.
+   - Verified: VLM confirmed warmer subject + darker/muted background when
+     enabled.
 
-2. **Before/after auto-cycle** (`AutoCycleButton.tsx`) — a play/pause button
-   in the info bar that animates the before/after slider in a continuous
-   ping-pong loop (3s each direction, 6s full cycle).
-   - Uses rAF for smooth 60fps motion.
-   - Amber pulse indicator when playing.
-   - Auto-stops when image is removed.
-   - Verified: VLM confirmed slider moved off-center + button showed pause.
-
-3. **Inline preview histogram** (`PreviewHistogram.tsx`) — a tiny RGB
-   histogram overlaid on the bottom-left of the image preview
-   (Lightroom-style CL/WS indicator).
-   - 120×36px, 32 bins, semi-transparent black + blur backdrop.
-   - Polls `renderer.readDownscaledPixels(48)` every 600ms + immediate
-     refresh on param/curve change (150ms debounce).
-   - Screen-blend mode for channel overlap.
-   - Verified: 3 SVG path children render with live data.
+2. **Tone curve keyboard nudging** (`CurveEditor.tsx`) — arrow keys nudge
+   the selected control point for precise editing.
+   - **Click** a control point to select it (animated dashed selection ring).
+   - **↑/↓** nudge the selected point's Y value by 0.01.
+   - **←/→** switch between control points.
+   - **Esc** deselects.
+   - Selection ring uses SVG `animateTransform` for a slow 4s rotation.
+   - Updated hint text with `<kbd>` chips.
+   - Verified: cy changed from 110 → 116.6 after 3 ArrowDown presses.
 
 ### Styling Polish Delivered
 
-- **Animated gradient title** — "Golden Hour" now has a slow amber-to-white
-  gradient pan (8s linear infinite) via `.gradient-title` utility.
-- **Glass panel utility** (`.glass-panel`) — 85% opaque + 16px blur +
-  saturation boost for future overlays.
-- **Amber pulse utility** (`.pulse-amber`) — for active-state buttons.
-- Curve section, easel corners, slider amber fill, film perforations, etc.
-  all retained from previous rounds.
+- New "Selective" section in ControlPanel with a mask icon.
+- Subject sub-panel: amber-tinted border + background.
+- Background sub-panel: teal-tinted border + background (#5b8fa3 accent).
+- Dual-thumb range slider with amber fill between thumbs.
+- Curve control point selection ring (animated dashed circle).
+- Curve hint text with styled `<kbd>` keyboard chips.
+- Updated KeyboardHelpDialog with 2 new entries (↑↓ nudge, ←→ switch).
 
 ### Verification Results (agent-browser + VLM)
 
 | Check | Result |
 |---|---|
-| Curve drag writes `cv=` to URL hash | ✅ `cv=AECA__8AQIC...` |
-| Reload restores curve from URL | ✅ points 0,0.251,0.502,1.0,1.0 |
-| Share button copies URL with curves | ✅ buildShareURL passes curves |
-| Auto-cycle animates slider | ✅ VLM: "slider positioned to the right" |
-| Auto-cycle button shows pause icon | ✅ VLM confirmed |
-| Inline preview histogram renders | ✅ 3 SVG paths with live data |
-| Animated gradient title | ✅ VLM: "amber-to-white gradient text" |
+| Selective section renders with toggle + dual-thumb slider | ✅ VLM confirmed |
+| Enable toggle switches to amber "Enabled" | ✅ VLM confirmed |
+| Subject/Background sub-panels visible when enabled | ✅ VLM confirmed |
+| Image shows warmer subject + darker background | ✅ VLM confirmed |
+| Curve click selects point (1 selection ring) | ✅ verified |
+| ArrowDown nudges point (cy 110→116.6) | ✅ verified |
+| All 6 sections visible (Color/Tone/Curve/Selective/Texture/My Presets) | ✅ VLM confirmed |
 | Lint clean, no runtime errors | ✅ |
 
-### Bug Found & Fixed During QA
-- **`react-hooks/set-state-in-effect` lint errors** in PreviewHistogram and
-  AutoCycleButton — fixed with targeted `eslint-disable` comments for
-  legitimate cleanup patterns (clearing state when image is removed,
-  stopping playback when image is removed).
-- **Preview histogram not initially visible** — the polling effect ran
-  before the renderer was ready. Fixed by delaying the first tick by 800ms
-  + adding try/catch around readPixels.
-
-### Files Added / Modified (Round 5)
+### Files Added / Modified (Round 6)
 ```
-NEW  src/components/editor/AutoCycleButton.tsx   # before/after play button
-NEW  src/components/editor/PreviewHistogram.tsx  # inline mini histogram
-MOD  src/lib/grade/url.ts                        # curve encode/decode + read/write
-MOD  src/store/editor-store.ts                   # pass curves to URL writer
-MOD  src/components/editor/ShareButton.tsx       # pass curves to buildShareURL
-MOD  src/components/editor/ImageInfoBar.tsx      # mount AutoCycleButton
-MOD  src/app/page.tsx                            # mount PreviewHistogram, gradient title
-MOD  src/app/globals.css                         # gradient-title, glass-panel, pulse-amber
+NEW  src/components/editor/SelectiveGradePanel.tsx  # subject isolation UI
+MOD  src/lib/grade/types.ts                        # SelectiveParams interface
+MOD  src/lib/grade/defaults.ts                     # DEFAULT_SELECTIVE
+MOD  src/lib/grade/shader.ts                       # pass 4b selective grade
+MOD  src/lib/grade/renderer.ts                     # selective uniforms + draw
+MOD  src/store/editor-store.ts                     # selective state + actions
+MOD  src/components/editor/ImageCanvas.tsx         # pass selective to draw/anim
+MOD  src/components/editor/DownloadButton.tsx      # pass selective on export
+MOD  src/components/editor/ControlPanel.tsx        # Selective section + MaskIcon
+MOD  src/components/editor/CurveEditor.tsx         # selection + keyboard nudging
+MOD  src/components/editor/KeyboardHelpDialog.tsx  # ↑↓ ←→ entries
 ```
 
 ---
 
-## Rounds 1-4 (reference, kept for context)
+## Rounds 1-5 (reference, kept for context)
 
+- **Round 5:** Curve state persistence (base64 URL), auto-cycle animation,
+  inline preview histogram, animated gradient title.
 - **Round 4:** Tone curve editor (Catmull-Rom + LUT texture), readPixels
   histogram, film leader countdown intro.
 - **Round 3:** 45° diagonal before/after handle, EXIF auto-rotation,
   undo/redo history scrubber, J/K preset stepping, film perforations.
 - **Round 2:** Shareable URL params, image rotation, compare-4-presets
   modal, keyboard help dialog, image info bar, custom user presets,
-  easel corners, top-bar glow, toasts, preset intensity bars.
+  easel corners, toasts, preset intensity bars.
 - **Round 1:** Initial build — WebGL1 fragment shader porting all 6 grade
   passes, all 10 hard acceptance criteria verified.
 
@@ -101,30 +96,34 @@ MOD  src/app/globals.css                         # gradient-title, glass-panel, 
 
 ## Unresolved Issues / Risks
 
-- **None blocking.** All Round 1-5 features verified.
-- **Minor:** The inline preview histogram polls every 600ms via
-  `readPixels` which forces a `gl.flush()`. On very large previews this
-  could cause minor frame drops; the 600ms interval + 48px downsample
-  keeps it negligible.
-- **Minor:** Curve quantization to 1 byte (0-255) per point introduces
-  tiny rounding (0.251 vs 0.25). Imperceptible visually.
-- **Minor:** The auto-cycle rAF loop and the renderer's grain rAF loop
-  run concurrently. Both are lightweight but could be merged if needed.
+- **None blocking.** All Round 1-6 features verified.
+- **Minor:** The selective grade's luminance mask is a simple global
+  threshold, not a true spatial segmentation. It works well for portraits
+  with clear subject/background luminance separation but won't isolate
+  subjects that share luminance with their background. A true ML-based
+  segmentation (e.g. BodyPix) would be more robust but adds significant
+  bundle size.
+- **Minor:** Selective params are NOT persisted to URL/localStorage yet
+  (only params + curves are). Could add `sel=` encoding if requested.
+- **Minor:** The dual-thumb range slider uses two overlapping native range
+  inputs with z-index tricks. Works in Chrome/Firefox/Safari but the thumb
+  hit areas can overlap at extreme values.
 
 ## Priority Recommendations for Next Phase
 
 1. **Web Worker for CPU fallback** — move the CPU grade path off the main
    thread for large exports on non-WebGL devices. Last remaining original
    stretch goal.
-2. **"Compare N custom presets"** — extend the compare modal to let users
-   pick which presets (built-in + saved) to compare side-by-side.
-3. **Selective color grade** — let users grade only the subject (via a
-   rough luminance/edge mask) differently from the background.
-4. **Batch processing** — drop multiple photos, apply the same grade to
+2. **Selective params persistence** — serialize selective params into the
+   URL + localStorage so they're shareable.
+3. **Batch processing** — drop multiple photos, apply the same grade to
    all, export as a zip.
-5. **Tone curve keyboard nudging** — arrow keys to nudge the selected
-   control point by 0.01.
-6. **Before/after auto-cycle with diagonal mode** — make the auto-cycle
+4. **Export history as a recipe** — save the full edit history (params +
+   curves + rotation + selective) as a shareable "recipe" JSON.
+5. **Before/after auto-cycle with diagonal mode** — make the auto-cycle
    work with the 45° diagonal split too.
-7. **Export history as a recipe** — save the full edit history (params +
-   curves + rotation) as a shareable "recipe" JSON.
+6. **Spatial subject mask** — integrate a lightweight segmentation model
+   (BodyPix/MediaPipe) for true subject isolation that doesn't rely on
+   luminance.
+7. **Color picker with hex input** — let users type a hex code directly
+   instead of only using the native picker.

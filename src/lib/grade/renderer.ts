@@ -5,7 +5,7 @@
  */
 
 import { VERTEX_SHADER, FRAGMENT_SHADER } from "./shader";
-import type { GradeParams } from "./types";
+import type { GradeParams, SelectiveParams } from "./types";
 import { hexToRgb } from "./color";
 import { buildCombinedLUT, type Curves, isAllCurvesDefault } from "./curve";
 
@@ -64,6 +64,14 @@ export interface Uniforms {
   grainSize: WebGLUniformLocation | null;
   time: WebGLUniformLocation | null;
   showOriginal: WebGLUniformLocation | null;
+  selectiveEnabled: WebGLUniformLocation | null;
+  selectiveStrength: WebGLUniformLocation | null;
+  subjectLumaLow: WebGLUniformLocation | null;
+  subjectLumaHigh: WebGLUniformLocation | null;
+  subjectWarmth: WebGLUniformLocation | null;
+  subjectSaturation: WebGLUniformLocation | null;
+  bgDarken: WebGLUniformLocation | null;
+  bgDesaturate: WebGLUniformLocation | null;
 }
 
 export class GradeRenderer {
@@ -133,6 +141,14 @@ export class GradeRenderer {
       grainSize: gl.getUniformLocation(this.program, "u_grainSize"),
       time: gl.getUniformLocation(this.program, "u_time"),
       showOriginal: gl.getUniformLocation(this.program, "u_showOriginal"),
+      selectiveEnabled: gl.getUniformLocation(this.program, "u_selectiveEnabled"),
+      selectiveStrength: gl.getUniformLocation(this.program, "u_selectiveStrength"),
+      subjectLumaLow: gl.getUniformLocation(this.program, "u_subjectLumaLow"),
+      subjectLumaHigh: gl.getUniformLocation(this.program, "u_subjectLumaHigh"),
+      subjectWarmth: gl.getUniformLocation(this.program, "u_subjectWarmth"),
+      subjectSaturation: gl.getUniformLocation(this.program, "u_subjectSaturation"),
+      bgDarken: gl.getUniformLocation(this.program, "u_bgDarken"),
+      bgDesaturate: gl.getUniformLocation(this.program, "u_bgDesaturate"),
     };
     gl.uniform1i(this.uniforms.image, 0);
     gl.uniform1i(this.uniforms.curveLUT, 1); // texture unit 1
@@ -316,10 +332,15 @@ export class GradeRenderer {
   }
 
   /**
-   * Render one frame with the given params.
+   * Render one frame with the given params + optional selective grade.
    * `showOriginal` short-circuits the pipeline and shows the raw image.
    */
-  draw(params: GradeParams, time: number, showOriginal = false) {
+  draw(
+    params: GradeParams,
+    time: number,
+    showOriginal = false,
+    selective?: SelectiveParams
+  ) {
     if (!this.hasTexture) return;
     const gl = this.gl;
     gl.useProgram(this.program);
@@ -346,6 +367,20 @@ export class GradeRenderer {
     gl.uniform1f(this.uniforms.time, time);
     gl.uniform1f(this.uniforms.showOriginal, showOriginal ? 1 : 0);
 
+    // Selective grade uniforms
+    if (selective && selective.enabled) {
+      gl.uniform1f(this.uniforms.selectiveEnabled, 1);
+      gl.uniform1f(this.uniforms.selectiveStrength, selective.strength);
+      gl.uniform1f(this.uniforms.subjectLumaLow, selective.subjectLumaLow);
+      gl.uniform1f(this.uniforms.subjectLumaHigh, selective.subjectLumaHigh);
+      gl.uniform1f(this.uniforms.subjectWarmth, selective.subjectWarmth);
+      gl.uniform1f(this.uniforms.subjectSaturation, selective.subjectSaturation);
+      gl.uniform1f(this.uniforms.bgDarken, selective.bgDarken);
+      gl.uniform1f(this.uniforms.bgDesaturate, selective.bgDesaturate);
+    } else {
+      gl.uniform1f(this.uniforms.selectiveEnabled, 0);
+    }
+
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -355,7 +390,11 @@ export class GradeRenderer {
    * Start a continuous rAF loop that re-renders the grain animation.
    * Capped to ~30fps to save battery; grain shimmer at 30fps is plenty.
    */
-  startAnimation(getParams: () => GradeParams, getShowOriginal: () => boolean) {
+  startAnimation(
+    getParams: () => GradeParams,
+    getShowOriginal: () => boolean,
+    getSelective?: () => SelectiveParams | null
+  ) {
     if (this.animating) return;
     this.animating = true;
     const loop = (t: number) => {
@@ -363,7 +402,7 @@ export class GradeRenderer {
       // ~30fps cap
       if (t - this.lastFrame >= 33) {
         this.lastFrame = t;
-        this.draw(getParams(), t / 1000, getShowOriginal());
+        this.draw(getParams(), t / 1000, getShowOriginal(), getSelective?.() ?? undefined);
       }
       this.rafId = requestAnimationFrame(loop);
     };
@@ -415,7 +454,8 @@ export async function renderFullRes(
   format: "jpeg" | "png",
   quality = 0.92,
   rotation: 0 | 90 | 180 | 270 = 0,
-  curves?: Curves
+  curves?: Curves,
+  selective?: SelectiveParams
 ): Promise<Blob> {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
@@ -427,7 +467,7 @@ export async function renderFullRes(
     if (curves) renderer.updateCurves(curves);
     const { w: tw, h: th } = renderer.dims;
     renderer.resizeCanvas(tw, th, 1); // 1:1 backing store for export
-    renderer.draw(params, Math.random() * 1000, false);
+    renderer.draw(params, Math.random() * 1000, false, selective);
     const blob = await renderer.toBlob(format, quality);
     renderer.dispose();
     if (blob) return blob;

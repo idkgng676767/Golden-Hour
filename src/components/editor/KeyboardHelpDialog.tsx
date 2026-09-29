@@ -11,6 +11,8 @@ const SHORTCUTS: { keys: string[]; label: string; hint?: string }[] = [
   { keys: ["K"], label: "Next custom preset" },
   { keys: ["R"], label: "Rotate image 90° clockwise" },
   { keys: ["C"], label: "Open preset comparison" },
+  { keys: ["↑", "↓"], label: "Nudge selected curve point", hint: "In curve editor" },
+  { keys: ["←", "→"], label: "Switch curve point" },
   { keys: ["⌘/Ctrl", "Z"], label: "Undo last change" },
   { keys: ["⌘/Ctrl", "Shift", "Z"], label: "Redo (or ⌘+Y)" },
   { keys: ["⌘/Ctrl", "S"], label: "Download graded image" },

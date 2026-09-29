@@ -21,6 +21,22 @@ export interface GradeParams {
   grainSize: number; // 0.3..1.5, default 0.6
 }
 
+/**
+ * SelectiveParams — subject isolation color grade.
+ * Applies a secondary grade to the subject (luminance band) and a different
+ * grade to the background. Disabled by default (strength = 0).
+ */
+export interface SelectiveParams {
+  enabled: boolean;
+  strength: number; // 0..1, default 0.5
+  subjectLumaLow: number; // 0..1, default 0.35
+  subjectLumaHigh: number; // 0..1, default 0.85
+  subjectWarmth: number; // 0..0.4, default 0.15
+  subjectSaturation: number; // 0.5..2, default 1.2
+  bgDarken: number; // 0..1, default 0.2
+  bgDesaturate: number; // 0..1, default 0.3
+}
+
 /** A live histogram computed from a downscaled preview, 3 channels × 64 bins. */
 export interface Histogram {
   r: number[];
